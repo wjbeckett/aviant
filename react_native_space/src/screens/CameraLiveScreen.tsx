@@ -1,23 +1,73 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, Platform } from 'react-native';
 import { Text, IconButton, SegmentedButtons } from 'react-native-paper';
 import { WebView } from 'react-native-webview';
 import { frigateApi } from '../services/frigateApi';
+
+// CookieManager only works on native platforms (iOS/Android), not web
+let CookieManager: any = null;
+if (Platform.OS !== 'web') {
+  try {
+    CookieManager = require('@react-native-cookies/cookies').default;
+  } catch (error) {
+    console.warn('CookieManager not available:', error);
+  }
+}
 
 type StreamType = 'webrtc' | 'mse' | 'mjpeg';
 
 export const CameraLiveScreen = ({ route, navigation }: any) => {
   const { cameraName } = route.params;
   const [error, setError] = useState(false);
-  const [streamType, setStreamType] = useState<StreamType>('webrtc');
+  const [streamType, setStreamType] = useState<StreamType>('mse'); // Start with MSE (best balance of quality and compatibility)
 
   const baseUrl = frigateApi.getBaseUrl();
   const baseUrlObj = new URL(baseUrl);
   
-  // go2rtc runs on port 1984 by default
-  const go2rtcUrl = `${baseUrlObj.protocol}//${baseUrlObj.hostname}:1984`;
+  // Frigate proxies go2rtc through the main server on port 443
+  // WebSocket endpoints: /live/webrtc/api/ws and /live/mse/api/ws
+  const wsProtocol = baseUrlObj.protocol === 'https:' ? 'wss:' : 'ws:';
+  const wsBaseUrl = `${wsProtocol}//${baseUrlObj.host}`;
+  
+  console.log('[CameraLive] Camera:', cameraName);
+  console.log('[CameraLive] Base URL:', baseUrl);
+  console.log('[CameraLive] WebSocket base:', wsBaseUrl);
+  console.log('[CameraLive] Stream type:', streamType);
+  
+  // Ensure WebView has access to authentication cookies (native platforms only)
+  useEffect(() => {
+    if (!CookieManager || Platform.OS === 'web') {
+      // On web, cookies are automatically managed by the browser
+      console.log('[CameraLive] Web platform: cookies managed by browser');
+      return;
+    }
+    
+    const setupCookies = async () => {
+      try {
+        const jwtToken = frigateApi.getJWTToken();
+        if (jwtToken && jwtToken !== 'web-cookie-auth') {
+          // Set the frigate_token cookie for WebView
+          await CookieManager.set(baseUrl, {
+            name: 'frigate_token',
+            value: jwtToken,
+            path: '/',
+            secure: baseUrlObj.protocol === 'https:',
+            httpOnly: false, // WebView needs to access it
+          });
+          console.log('[CameraLive] Set frigate_token cookie for WebView');
+        }
+      } catch (error) {
+        console.error('[CameraLive] Error setting cookies:', error);
+      }
+    };
+    
+    setupCookies();
+  }, [baseUrl]);
 
-  // WebRTC stream HTML (using go2rtc's built-in player)
+  // WebRTC stream HTML (using Frigate's proxied go2rtc WebSocket)
+  const webrtcWsUrl = `${wsBaseUrl}/live/webrtc/api/ws?src=${cameraName}`;
+  console.log('[CameraLive] WebRTC WS URL:', webrtcWsUrl);
+  
   const webrtcHtml = `
     <!DOCTYPE html>
     <html>
@@ -38,20 +88,104 @@ export const CameraLiveScreen = ({ route, navigation }: any) => {
           height: 100%;
           object-fit: contain;
         }
+        .error {
+          color: #f44336;
+          padding: 20px;
+          text-align: center;
+        }
       </style>
-      <script src="${go2rtcUrl}/webrtc/webrtc.js"></script>
     </head>
     <body>
       <video id="video" autoplay muted playsinline controls></video>
+      <div id="error" class="error" style="display: none;">
+        <h3>WebRTC Stream Failed</h3>
+        <p id="errorMsg"></p>
+      </div>
       <script>
+        console.log('Initializing WebRTC stream for ${cameraName}');
         const video = document.getElementById('video');
-        const webrtc = new WebRTCPlayer(video, "${go2rtcUrl}/api/ws?src=${cameraName}");
+        const errorDiv = document.getElementById('error');
+        const errorMsg = document.getElementById('errorMsg');
+        
+        // Simple WebRTC implementation using native WebRTC APIs
+        const pc = new RTCPeerConnection({
+          iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+        });
+        
+        pc.ontrack = (event) => {
+          console.log('Received track:', event.track.kind);
+          video.srcObject = event.streams[0];
+          window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify({
+            type: 'stream_loaded',
+            streamType: 'webrtc'
+          }));
+        };
+        
+        pc.addTransceiver('video', { direction: 'recvonly' });
+        pc.addTransceiver('audio', { direction: 'recvonly' });
+        
+        const ws = new WebSocket('${webrtcWsUrl}');
+        
+        ws.onopen = () => {
+          console.log('WebSocket connected');
+          pc.createOffer().then(offer => {
+            return pc.setLocalDescription(offer);
+          }).then(() => {
+            ws.send(JSON.stringify({
+              type: 'webrtc/offer',
+              value: pc.localDescription.sdp
+            }));
+          });
+        };
+        
+        ws.onmessage = (event) => {
+          const msg = JSON.parse(event.data);
+          if (msg.type === 'webrtc/answer') {
+            pc.setRemoteDescription(new RTCSessionDescription({
+              type: 'answer',
+              sdp: msg.value
+            }));
+          }
+        };
+        
+        ws.onerror = (error) => {
+          console.error('WebSocket error:', error);
+          errorMsg.textContent = 'WebSocket connection failed';
+          errorDiv.style.display = 'block';
+          video.style.display = 'none';
+          window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify({
+            type: 'stream_error',
+            streamType: 'webrtc',
+            error: 'WebSocket connection failed'
+          }));
+        };
+        
+        ws.onclose = () => {
+          console.log('WebSocket closed');
+        };
+        
+        pc.oniceconnectionstatechange = () => {
+          console.log('ICE connection state:', pc.iceConnectionState);
+          if (pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'disconnected') {
+            errorMsg.textContent = 'Connection failed: ' + pc.iceConnectionState;
+            errorDiv.style.display = 'block';
+            video.style.display = 'none';
+            window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify({
+              type: 'stream_error',
+              streamType: 'webrtc',
+              error: pc.iceConnectionState
+            }));
+          }
+        };
       </script>
     </body>
     </html>
   `;
 
-  // MSE/HLS stream HTML (fallback option)
+  // MSE stream HTML (using Frigate's proxied go2rtc WebSocket)
+  const mseWsUrl = `${wsBaseUrl}/live/mse/api/ws?src=${cameraName}`;
+  console.log('[CameraLive] MSE WS URL:', mseWsUrl);
+  
   const mseHtml = `
     <!DOCTYPE html>
     <html>
@@ -72,32 +206,103 @@ export const CameraLiveScreen = ({ route, navigation }: any) => {
           height: 100%;
           object-fit: contain;
         }
+        .error {
+          color: #f44336;
+          padding: 20px;
+          text-align: center;
+        }
       </style>
     </head>
     <body>
       <video id="video" autoplay muted playsinline controls></video>
+      <div id="error" class="error" style="display: none;">
+        <h3>MSE Stream Failed</h3>
+        <p id="errorMsg"></p>
+      </div>
       <script>
+        console.log('Initializing MSE stream for ${cameraName}');
         const video = document.getElementById('video');
+        const errorDiv = document.getElementById('error');
+        const errorMsg = document.getElementById('errorMsg');
+        
         const mediaSource = new MediaSource();
         video.src = URL.createObjectURL(mediaSource);
         
+        let sourceBuffer = null;
+        let queue = [];
+        
         mediaSource.addEventListener('sourceopen', () => {
-          fetch('${go2rtcUrl}/api/stream.mp4?src=${cameraName}')
-            .then(response => {
-              const reader = response.body.getReader();
-              const sourceBuffer = mediaSource.addSourceBuffer('video/mp4; codecs="avc1.640028"');
+          console.log('MediaSource opened');
+          
+          const ws = new WebSocket('${mseWsUrl}');
+          ws.binaryType = 'arraybuffer';
+          
+          ws.onopen = () => {
+            console.log('MSE WebSocket connected');
+          };
+          
+          ws.onmessage = (event) => {
+            if (typeof event.data === 'string') {
+              const msg = JSON.parse(event.data);
+              console.log('MSE control message:', msg);
               
-              function push() {
-                reader.read().then(({done, value}) => {
-                  if (done) return;
-                  sourceBuffer.appendBuffer(value);
-                  if (!sourceBuffer.updating) push();
-                });
+              if (msg.type === 'mse' && msg.value) {
+                try {
+                  sourceBuffer = mediaSource.addSourceBuffer(msg.value);
+                  sourceBuffer.mode = 'segments';
+                  
+                  sourceBuffer.addEventListener('updateend', () => {
+                    if (queue.length > 0 && !sourceBuffer.updating) {
+                      const data = queue.shift();
+                      sourceBuffer.appendBuffer(data);
+                    }
+                  });
+                  
+                  window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify({
+                    type: 'stream_loaded',
+                    streamType: 'mse'
+                  }));
+                } catch (e) {
+                  console.error('Failed to add source buffer:', e);
+                  errorMsg.textContent = 'Codec not supported: ' + msg.value;
+                  errorDiv.style.display = 'block';
+                  video.style.display = 'none';
+                }
               }
-              
-              sourceBuffer.addEventListener('updateend', push);
-              push();
-            });
+            } else if (event.data instanceof ArrayBuffer) {
+              if (sourceBuffer) {
+                if (sourceBuffer.updating || queue.length > 0) {
+                  queue.push(event.data);
+                } else {
+                  try {
+                    sourceBuffer.appendBuffer(event.data);
+                  } catch (e) {
+                    console.error('Failed to append buffer:', e);
+                  }
+                }
+              }
+            }
+          };
+          
+          ws.onerror = (error) => {
+            console.error('MSE WebSocket error:', error);
+            errorMsg.textContent = 'WebSocket connection failed';
+            errorDiv.style.display = 'block';
+            video.style.display = 'none';
+            window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify({
+              type: 'stream_error',
+              streamType: 'mse',
+              error: 'WebSocket connection failed'
+            }));
+          };
+          
+          ws.onclose = () => {
+            console.log('MSE WebSocket closed');
+          };
+        });
+        
+        mediaSource.addEventListener('sourceclose', () => {
+          console.log('MediaSource closed');
         });
       </script>
     </body>
@@ -106,6 +311,8 @@ export const CameraLiveScreen = ({ route, navigation }: any) => {
 
   // MJPEG stream HTML (last resort fallback)
   const mjpegStreamUrl = frigateApi.getCameraMjpegStreamUrl(cameraName);
+  console.log('[CameraLive] MJPEG URL:', mjpegStreamUrl);
+  
   const mjpegHtml = `
     <!DOCTYPE html>
     <html>
@@ -126,10 +333,40 @@ export const CameraLiveScreen = ({ route, navigation }: any) => {
           max-height: 100%;
           object-fit: contain;
         }
+        .error {
+          color: #f44336;
+          padding: 20px;
+          text-align: center;
+        }
       </style>
     </head>
     <body>
-      <img src="${mjpegStreamUrl}" alt="Live Stream" />
+      <img id="stream" src="${mjpegStreamUrl}" alt="Live Stream" 
+           onerror="handleError()" 
+           onload="handleLoad()" />
+      <div id="error" class="error" style="display: none;">
+        <h3>Stream Failed</h3>
+        <p>URL: ${mjpegStreamUrl}</p>
+      </div>
+      <script>
+        function handleLoad() {
+          console.log('MJPEG stream loaded successfully');
+          window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify({
+            type: 'stream_loaded',
+            url: '${mjpegStreamUrl}'
+          }));
+        }
+        
+        function handleError() {
+          console.error('MJPEG stream failed to load');
+          document.getElementById('stream').style.display = 'none';
+          document.getElementById('error').style.display = 'block';
+          window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify({
+            type: 'stream_error',
+            url: '${mjpegStreamUrl}'
+          }));
+        }
+      </script>
     </body>
     </html>
   `;
@@ -165,11 +402,15 @@ export const CameraLiveScreen = ({ route, navigation }: any) => {
       <View style={styles.streamControls}>
         <SegmentedButtons
           value={streamType}
-          onValueChange={(value) => setStreamType(value as StreamType)}
+          onValueChange={(value) => {
+            console.log('[CameraLive] Switching to stream type:', value);
+            setStreamType(value as StreamType);
+            setError(false); // Reset error state when switching
+          }}
           buttons={[
-            { value: 'webrtc', label: 'HD' },
-            { value: 'mse', label: 'High' },
-            { value: 'mjpeg', label: 'Low' },
+            { value: 'webrtc', label: 'WebRTC', icon: 'video-wireless' },
+            { value: 'mse', label: 'MSE', icon: 'play-circle' },
+            { value: 'mjpeg', label: 'MJPEG', icon: 'image-multiple' },
           ]}
           style={styles.segmentedButtons}
         />
@@ -179,11 +420,32 @@ export const CameraLiveScreen = ({ route, navigation }: any) => {
         key={streamType} // Force re-render when stream type changes
         source={{ html: getStreamHtml() }}
         style={styles.webview}
-        onError={() => setError(true)}
+        onError={(syntheticEvent) => {
+          const { nativeEvent } = syntheticEvent;
+          console.error('[CameraLive] WebView error:', nativeEvent);
+          setError(true);
+        }}
+        onMessage={(event) => {
+          try {
+            const data = JSON.parse(event.nativeEvent.data);
+            console.log('[CameraLive] Message from WebView:', data);
+            if (data.type === 'stream_error') {
+              setError(true);
+            } else if (data.type === 'stream_loaded') {
+              setError(false);
+            }
+          } catch (e) {
+            console.error('[CameraLive] Failed to parse WebView message:', e);
+          }
+        }}
+        onLoadStart={() => console.log('[CameraLive] WebView load started')}
+        onLoadEnd={() => console.log('[CameraLive] WebView load ended')}
         allowsInlineMediaPlayback
         mediaPlaybackRequiresUserAction={false}
         javaScriptEnabled
         domStorageEnabled
+        thirdPartyCookiesEnabled
+        sharedCookiesEnabled
       />
 
       {error && (
