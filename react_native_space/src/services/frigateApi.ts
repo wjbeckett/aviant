@@ -1,6 +1,6 @@
 import axios, { AxiosInstance, AxiosError } from 'axios';
 import * as SecureStore from 'expo-secure-store';
-import * as Sentry from 'sentry-expo';
+import * as Sentry from '@sentry/react-native';
 
 const FRIGATE_LOCAL_URL_KEY = 'frigate_local_url';
 const FRIGATE_REMOTE_URL_KEY = 'frigate_remote_url';

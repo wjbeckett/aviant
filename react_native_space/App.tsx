@@ -5,7 +5,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Provider as PaperProvider, MD3DarkTheme } from 'react-native-paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import * as Sentry from 'sentry-expo';
+import * as Sentry from '@sentry/react-native';
 
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { AuthScreen } from './src/screens/AuthScreen';
@@ -20,6 +20,8 @@ if (process.env.EXPO_PUBLIC_SENTRY_DSN) {
     dsn: process.env.EXPO_PUBLIC_SENTRY_DSN,
     enableInExpoDevelopment: false,
     debug: __DEV__,
+    // Enable tracing
+    tracesSampleRate: 1.0,
   });
 }
 
