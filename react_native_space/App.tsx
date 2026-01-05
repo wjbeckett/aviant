@@ -148,7 +148,7 @@ function AppNavigator() {
   );
 }
 
-export default function App() {
+export default Sentry.wrap(function App() {
   return (
     <ErrorBoundary>
       <SafeAreaProvider>
@@ -160,4 +160,4 @@ export default function App() {
       </SafeAreaProvider>
     </ErrorBoundary>
   );
-}
+});

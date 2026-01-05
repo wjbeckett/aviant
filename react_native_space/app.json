@@ -31,7 +31,15 @@
     "plugins": [
       "expo-secure-store",
       "expo-font",
-      "@sentry/react-native"
+      "@sentry/react-native",
+      [
+        "@sentry/react-native/expo",
+        {
+          "url": "https://sentry.io/",
+          "project": "aviant",
+          "organization": "wb-n2"
+        }
+      ]
     ]
   }
 }
