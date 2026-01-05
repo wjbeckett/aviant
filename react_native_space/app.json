@@ -23,8 +23,7 @@
       },
       "package": "com.aviant.app",
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false,
-      "networkSecurityConfig": "./android/network_security_config.xml"
+      "predictiveBackGestureEnabled": false
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -33,11 +32,6 @@
       "expo-secure-store",
       "expo-font",
       "sentry-expo"
-    ],
-    "extra": {
-      "eas": {
-        "projectId": "3d5eb020-cc40-4fc0-b5ca-21fcc0845f71"
-      }
-    }
+    ]
   }
 }
