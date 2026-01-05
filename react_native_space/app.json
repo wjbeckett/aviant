@@ -36,9 +36,9 @@
       [
         "@sentry/react-native",
         {
-          "organization": "your-org-slug",
+          "organization": "wb-n2",
           "project": "aviant",
-          "uploadSourceMaps": false
+          "uploadSourceMaps": true
         }
       ]
     ]
