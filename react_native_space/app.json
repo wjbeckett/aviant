@@ -33,6 +33,11 @@
       "expo-secure-store",
       "expo-font",
       "sentry-expo"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "3d5eb020-cc40-4fc0-b5ca-21fcc0845f71"
+      }
+    }
   }
 }
