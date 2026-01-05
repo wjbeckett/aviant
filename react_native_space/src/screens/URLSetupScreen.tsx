@@ -53,12 +53,21 @@ export const URLSetupScreen = () => {
     try {
       // Test connection to Frigate API using the health check endpoint
       // This endpoint returns 200 OK without authentication
+      console.log('[URLSetup] Making request to:', `${finalUrl}/api/`);
+      console.log('[URLSetup] Axios config:', {
+        timeout: 10000,
+        headers: { 'Accept': 'application/json' }
+      });
+      
       const response = await axios.get(`${finalUrl}/api/`, {
         timeout: 10000,
         validateStatus: (status) => status === 200, // Only accept 200 as success
+        headers: {
+          'Accept': 'application/json',
+        },
       });
       
-      console.log('[URLSetup] Connection successful:', response.data);
+      console.log('[URLSetup] Connection successful:', response.status, response.data);
       
       Sentry.addBreadcrumb({
         category: 'auth',
@@ -73,6 +82,22 @@ export const URLSetupScreen = () => {
     } catch (error: any) {
       console.error('[URLSetup] Connection failed:', error.message);
       console.error('[URLSetup] Error details:', error.code, error.response?.status);
+      console.error('[URLSetup] Full error:', JSON.stringify({
+        message: error.message,
+        code: error.code,
+        name: error.name,
+        stack: error.stack?.substring(0, 200),
+        config: {
+          url: error.config?.url,
+          method: error.config?.method,
+          timeout: error.config?.timeout,
+        },
+        response: error.response ? {
+          status: error.response.status,
+          statusText: error.response.statusText,
+          data: error.response.data,
+        } : null,
+      }, null, 2));
       
       Sentry.captureException(error, {
         tags: { screen: 'url_setup' },
@@ -81,6 +106,7 @@ export const URLSetupScreen = () => {
           errorMessage: error.message,
           errorCode: error.code,
           statusCode: error.response?.status,
+          errorName: error.name,
         },
       });
 
