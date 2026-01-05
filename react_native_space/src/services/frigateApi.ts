@@ -2,12 +2,10 @@ import axios, { AxiosInstance, AxiosError } from 'axios';
 import * as SecureStore from 'expo-secure-store';
 import * as Sentry from '@sentry/react-native';
 
-const FRIGATE_LOCAL_URL_KEY = 'frigate_local_url';
-const FRIGATE_REMOTE_URL_KEY = 'frigate_remote_url';
+const FRIGATE_URL_KEY = 'frigate_url';
 const FRIGATE_USERNAME_KEY = 'frigate_username';
 const FRIGATE_PASSWORD_KEY = 'frigate_password';
 const FRIGATE_JWT_TOKEN_KEY = 'frigate_jwt_token';
-const FRIGATE_CURRENT_URL_KEY = 'frigate_current_url';
 
 export interface FrigateConfig {
   cameras: Record<string, any>;
@@ -37,92 +35,19 @@ interface LoginResponse {
 class FrigateApiService {
   private client: AxiosInstance | null = null;
   private baseUrl: string = '';
-  private localUrl: string = '';
-  private remoteUrl: string = '';
   private jwtToken: string | null = null;
   private username: string = '';
   private password: string = '';
 
-  /**
-   * Test if a URL is reachable
-   */
-  private async testConnection(url: string): Promise<boolean> {
-    try {
-      console.log('[FrigateAPI] Testing connection to:', url);
-      Sentry.addBreadcrumb({
-        category: 'api',
-        message: 'Testing Frigate connection',
-        level: 'info',
-        data: { url },
-      });
-      await axios.get(`${url}/api/version`, { timeout: 3000 });
-      console.log('[FrigateAPI] Connection successful to:', url);
-      Sentry.addBreadcrumb({
-        category: 'api',
-        message: 'Connection successful',
-        level: 'info',
-        data: { url },
-      });
-      return true;
-    } catch (error) {
-      console.log('[FrigateAPI] Connection failed to:', url);
-      Sentry.addBreadcrumb({
-        category: 'api',
-        message: 'Connection failed',
-        level: 'warning',
-        data: { url, error: (error as Error).message },
-      });
-      return false;
-    }
-  }
-
-  /**
-   * Determine which URL to use (local or remote)
-   */
-  private async selectBestUrl(): Promise<string> {
-    // If we have both URLs, test local first (faster), then remote
-    if (this.localUrl && this.remoteUrl) {
-      console.log('[FrigateAPI] Testing which URL is reachable...');
-      
-      const localReachable = await this.testConnection(this.localUrl);
-      if (localReachable) {
-        console.log('[FrigateAPI] Using local URL:', this.localUrl);
-        return this.localUrl;
-      }
-      
-      const remoteReachable = await this.testConnection(this.remoteUrl);
-      if (remoteReachable) {
-        console.log('[FrigateAPI] Using remote URL:', this.remoteUrl);
-        return this.remoteUrl;
-      }
-      
-      throw new Error('Neither local nor remote Frigate URL is reachable');
-    }
-    
-    // If only one URL is configured, use it
-    const url = this.localUrl || this.remoteUrl || this.baseUrl;
-    if (!url) {
-      throw new Error('No Frigate URL configured');
-    }
-    return url;
-  }
-
   async login(
     username: string, 
     password: string, 
-    localUrl?: string, 
-    remoteUrl?: string
+    frigateUrl: string
   ): Promise<void> {
     try {
       this.username = username;
       this.password = password;
-      
-      // Store URLs
-      if (localUrl) this.localUrl = localUrl.replace(/\/$/, '');
-      if (remoteUrl) this.remoteUrl = remoteUrl.replace(/\/$/, '');
-      
-      // Select the best URL (local if available, otherwise remote)
-      this.baseUrl = await this.selectBestUrl();
+      this.baseUrl = frigateUrl.replace(/\/$/, '');
 
       console.log('[FrigateAPI] Attempting login to:', `${this.baseUrl}/api/login`);
       console.log('[FrigateAPI] Username:', username);
@@ -164,9 +89,7 @@ class FrigateApiService {
         this.jwtToken = token;
 
         // Store credentials securely
-        if (this.localUrl) await SecureStore.setItemAsync(FRIGATE_LOCAL_URL_KEY, this.localUrl);
-        if (this.remoteUrl) await SecureStore.setItemAsync(FRIGATE_REMOTE_URL_KEY, this.remoteUrl);
-        await SecureStore.setItemAsync(FRIGATE_CURRENT_URL_KEY, this.baseUrl);
+        await SecureStore.setItemAsync(FRIGATE_URL_KEY, this.baseUrl);
         await SecureStore.setItemAsync(FRIGATE_USERNAME_KEY, username);
         await SecureStore.setItemAsync(FRIGATE_PASSWORD_KEY, password);
         await SecureStore.setItemAsync(FRIGATE_JWT_TOKEN_KEY, token);
@@ -208,7 +131,7 @@ class FrigateApiService {
       Sentry.captureException(error, {
         tags: { feature: 'login' },
         extra: { 
-          frigateUrl,
+          frigateUrl: this.baseUrl,
           errorCode: error.code,
           statusCode: error.response?.status,
         }
@@ -229,35 +152,16 @@ class FrigateApiService {
     }
   }
 
-  /**
-   * Switch to a different URL (local or remote) and reconnect
-   */
-  async switchUrl(): Promise<void> {
-    if (!this.username || !this.password) {
-      throw new Error('Cannot switch URL: No credentials stored');
-    }
-    
-    // Re-select the best URL
-    this.baseUrl = await this.selectBestUrl();
-    
-    // Re-login with new URL
-    await this.login(this.username, this.password, this.localUrl, this.remoteUrl);
-  }
-
   async restoreSession(): Promise<boolean> {
     try {
-      const localUrl = await SecureStore.getItemAsync(FRIGATE_LOCAL_URL_KEY);
-      const remoteUrl = await SecureStore.getItemAsync(FRIGATE_REMOTE_URL_KEY);
-      const currentUrl = await SecureStore.getItemAsync(FRIGATE_CURRENT_URL_KEY);
+      const url = await SecureStore.getItemAsync(FRIGATE_URL_KEY);
       const username = await SecureStore.getItemAsync(FRIGATE_USERNAME_KEY);
       const password = await SecureStore.getItemAsync(FRIGATE_PASSWORD_KEY);
       const token = await SecureStore.getItemAsync(FRIGATE_JWT_TOKEN_KEY);
 
-      if (!token || (!localUrl && !remoteUrl && !currentUrl)) return false;
+      if (!token || !url) return false;
 
-      this.localUrl = localUrl || '';
-      this.remoteUrl = remoteUrl || '';
-      this.baseUrl = currentUrl || '';
+      this.baseUrl = url;
       this.username = username || '';
       this.password = password || '';
       this.jwtToken = token;
@@ -278,8 +182,8 @@ class FrigateApiService {
         return true;
       } catch (error: any) {
         // Token expired or invalid, try to re-login if we have credentials
-        if (username && password) {
-          await this.login(username, password, this.localUrl, this.remoteUrl);
+        if (username && password && url) {
+          await this.login(username, password, url);
           return true;
         }
         return false;
@@ -290,9 +194,7 @@ class FrigateApiService {
   }
 
   async clearSession(): Promise<void> {
-    await SecureStore.deleteItemAsync(FRIGATE_LOCAL_URL_KEY);
-    await SecureStore.deleteItemAsync(FRIGATE_REMOTE_URL_KEY);
-    await SecureStore.deleteItemAsync(FRIGATE_CURRENT_URL_KEY);
+    await SecureStore.deleteItemAsync(FRIGATE_URL_KEY);
     await SecureStore.deleteItemAsync(FRIGATE_USERNAME_KEY);
     await SecureStore.deleteItemAsync(FRIGATE_PASSWORD_KEY);
     await SecureStore.deleteItemAsync(FRIGATE_JWT_TOKEN_KEY);

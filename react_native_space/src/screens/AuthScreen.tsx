@@ -8,6 +8,7 @@ import {
   Alert,
 } from 'react-native';
 import { TextInput, Button, Text, Divider, HelperText } from 'react-native-paper';
+import * as Sentry from '@sentry/react-native';
 import { useAuth } from '../context/AuthContext';
 
 export const AuthScreen = () => {
@@ -44,6 +45,17 @@ export const AuthScreen = () => {
       console.log('[AuthScreen] Login successful');
     } catch (error: any) {
       console.error('[AuthScreen] Login failed:', error.message);
+      
+      // Report to Sentry
+      Sentry.captureException(error, {
+        tags: { screen: 'auth' },
+        extra: {
+          localUrl: local ? 'configured' : 'not configured',
+          remoteUrl: remote ? 'configured' : 'not configured',
+          errorMessage: error.message,
+        }
+      });
+      
       Alert.alert(
         'Login Failed',
         error.message || 'Could not login to Frigate. Please check your credentials and try again.'
@@ -84,7 +96,7 @@ export const AuthScreen = () => {
             value={localUrl}
             onChangeText={setLocalUrl}
             mode="outlined"
-            placeholder="http://192.168.101.4:5000"
+            placeholder="http://192.168.1.100:5000"
             autoCapitalize="none"
             autoCorrect={false}
             keyboardType="url"
@@ -99,7 +111,7 @@ export const AuthScreen = () => {
             value={remoteUrl}
             onChangeText={setRemoteUrl}
             mode="outlined"
-            placeholder="https://cctv.beckettnet.org"
+            placeholder="https://frigate.example.com"
             autoCapitalize="none"
             autoCorrect={false}
             keyboardType="url"

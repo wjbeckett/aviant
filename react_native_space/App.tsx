@@ -9,7 +9,9 @@ import * as Sentry from '@sentry/react-native';
 
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
-import { AuthScreen } from './src/screens/AuthScreen';
+import { URLSetupScreen } from './src/screens/URLSetupScreen';
+import { LoginScreen } from './src/screens/LoginScreen';
+import { SettingsScreen } from './src/screens/SettingsScreen';
 import { LiveCamerasScreen } from './src/screens/LiveCamerasScreen';
 import { EventsScreen } from './src/screens/EventsScreen';
 import { CameraLiveScreen } from './src/screens/CameraLiveScreen';
@@ -148,7 +150,9 @@ function AppNavigator() {
         </Stack.Navigator>
       ) : (
         <Stack.Navigator screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="Auth" component={AuthScreen} />
+          <Stack.Screen name="URLSetup" component={URLSetupScreen} />
+          <Stack.Screen name="Login" component={LoginScreen} />
+          <Stack.Screen name="Settings" component={SettingsScreen} />
         </Stack.Navigator>
       )}
     </NavigationContainer>
