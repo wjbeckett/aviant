@@ -128,7 +128,7 @@ export const SettingsScreen = () => {
               }}
             />
             <HelperText type="info" visible>
-              Use HTTPS and port 8971 for secure remote access
+              Use HTTPS and port 8971. For self-signed certificates, install the certificate on your device first.
             </HelperText>
           </Card.Content>
         </Card>
@@ -155,6 +155,31 @@ export const SettingsScreen = () => {
         </Card>
 
         <Divider style={styles.divider} />
+
+        {/* SSL Certificate Help */}
+        <Card style={styles.card}>
+          <Card.Content>
+            <Text variant="titleMedium" style={styles.sectionTitle}>
+              Self-Signed Certificates
+            </Text>
+            <Text variant="bodySmall" style={styles.helpText}>
+              If your Frigate server uses a self-signed SSL certificate, you'll need to install it on your Android device:
+            </Text>
+            <Text variant="bodySmall" style={styles.helpStep}>
+              1. Get the certificate from your server{'\n'}
+              2. Settings → Security → Encryption & credentials{'\n'}
+              3. Install a certificate → CA certificate{'\n'}
+              4. Select your certificate file{'\n'}
+              5. Return to this app
+            </Text>
+            <Text variant="bodySmall" style={styles.helpText}>
+              Alternative solutions:{'\n'}
+              • Use Caddy, Nginx, or Traefik with Let's Encrypt{'\n'}
+              • Access via Tailscale with MagicDNS{'\n'}
+              • Use ngrok or Cloudflare Tunnel
+            </Text>
+          </Card.Content>
+        </Card>
 
         {/* About Section */}
         <Card style={styles.card}>
@@ -241,6 +266,17 @@ const styles = StyleSheet.create({
   divider: {
     marginVertical: 8,
     backgroundColor: '#424242',
+  },
+  helpText: {
+    color: '#9E9E9E',
+    lineHeight: 20,
+    marginBottom: 12,
+  },
+  helpStep: {
+    color: '#FFFFFF',
+    lineHeight: 22,
+    marginBottom: 12,
+    fontFamily: 'monospace',
   },
   aboutText: {
     color: '#FFFFFF',
