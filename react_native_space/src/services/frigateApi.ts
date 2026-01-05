@@ -1,6 +1,7 @@
 import axios, { AxiosInstance, AxiosError } from 'axios';
 import * as SecureStore from 'expo-secure-store';
 import * as Sentry from '@sentry/react-native';
+import CookieManager from '@react-native-cookies/cookies';
 
 const FRIGATE_URL_KEY = 'frigate_url';
 const FRIGATE_USERNAME_KEY = 'frigate_username';
@@ -65,12 +66,39 @@ class FrigateApiService {
           }
         );
 
-        console.log('[FrigateAPI] Login response:', response.status, response.data);
+        console.log('[FrigateAPI] Login response status:', response.status);
+        console.log('[FrigateAPI] Login response data:', JSON.stringify(response.data));
         
-        const token = response.data?.access_token || 
-                      response.data?.token || 
-                      response.data?.jwt ||
-                      response.data?.accessToken;
+        // Frigate returns JWT in a cookie called "frigate_token"
+        // We need to use CookieManager to access it since axios can't read Set-Cookie headers
+        let token = null;
+        
+        try {
+          // Get cookies for the Frigate URL
+          const urlObj = new URL(this.baseUrl);
+          const cookies = await CookieManager.get(urlObj.origin);
+          console.log('[FrigateAPI] All cookies:', JSON.stringify(cookies, null, 2));
+          
+          // Extract the frigate_token cookie
+          if (cookies.frigate_token) {
+            token = cookies.frigate_token.value;
+            console.log('[FrigateAPI] Found frigate_token cookie (length:', token.length, ')');
+          }
+        } catch (cookieError) {
+          console.error('[FrigateAPI] Error reading cookies:', cookieError);
+        }
+        
+        // Fallback: Try to extract token from response body (some Frigate versions)
+        if (!token) {
+          token = response.data?.access_token || 
+                  response.data?.token || 
+                  response.data?.jwt ||
+                  response.data?.accessToken;
+          
+          if (token) {
+            console.log('[FrigateAPI] Found token in response body (length:', token.length, ')');
+          }
+        }
         
         if (!token) {
           const errorMsg = 'No authentication token received from Frigate';
@@ -85,6 +113,8 @@ class FrigateApiService {
           });
           throw new Error(errorMsg);
         }
+        
+        console.log('[FrigateAPI] Successfully extracted token (length:', token.length, ')');
 
         this.jwtToken = token;
 
@@ -194,10 +224,24 @@ class FrigateApiService {
   }
 
   async clearSession(): Promise<void> {
+    // Clear cookies
+    if (this.baseUrl) {
+      try {
+        const urlObj = new URL(this.baseUrl);
+        await CookieManager.clearByName(urlObj.origin, 'frigate_token');
+        console.log('[FrigateAPI] Cleared frigate_token cookie');
+      } catch (error) {
+        console.error('[FrigateAPI] Error clearing cookies:', error);
+      }
+    }
+    
+    // Clear stored credentials
     await SecureStore.deleteItemAsync(FRIGATE_URL_KEY);
     await SecureStore.deleteItemAsync(FRIGATE_USERNAME_KEY);
     await SecureStore.deleteItemAsync(FRIGATE_PASSWORD_KEY);
     await SecureStore.deleteItemAsync(FRIGATE_JWT_TOKEN_KEY);
+    
+    // Reset state
     this.client = null;
     this.baseUrl = '';
     this.jwtToken = null;
