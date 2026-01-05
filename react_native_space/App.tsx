@@ -15,12 +15,15 @@ import { EventsScreen } from './src/screens/EventsScreen';
 import { CameraLiveScreen } from './src/screens/CameraLiveScreen';
 import { EventDetailsScreen } from './src/screens/EventDetailsScreen';
 
-// Create routing instrumentation for performance monitoring
-const routingInstrumentation = new Sentry.ReactNavigationInstrumentation();
-
 // Initialize Sentry for error tracking (optional - only if DSN is configured)
+// IMPORTANT: Must be done before creating any instrumentation
+let routingInstrumentation: Sentry.ReactNavigationInstrumentation | undefined;
+
 if (process.env.EXPO_PUBLIC_SENTRY_DSN) {
   try {
+    // Create routing instrumentation AFTER checking DSN exists
+    routingInstrumentation = new Sentry.ReactNavigationInstrumentation();
+    
     Sentry.init({
       dsn: process.env.EXPO_PUBLIC_SENTRY_DSN,
       enableInExpoDevelopment: false,
@@ -114,22 +117,26 @@ function AppNavigator() {
     <NavigationContainer
       ref={navigationRef}
       onReady={() => {
-        // Register navigation container with Sentry
-        routingInstrumentation.registerNavigationContainer(navigationRef);
+        // Register navigation container with Sentry (only if Sentry is initialized)
+        if (routingInstrumentation) {
+          routingInstrumentation.registerNavigationContainer(navigationRef);
+        }
       }}
       onStateChange={() => {
-        // Track screen views
-        const currentRoute = navigationRef.current?.getCurrentRoute();
-        if (currentRoute) {
-          Sentry.addBreadcrumb({
-            category: 'navigation',
-            message: `Navigated to ${currentRoute.name}`,
-            level: 'info',
-            data: {
-              screen: currentRoute.name,
-              params: currentRoute.params,
-            },
-          });
+        // Track screen views (only if Sentry is initialized)
+        if (process.env.EXPO_PUBLIC_SENTRY_DSN) {
+          const currentRoute = navigationRef.current?.getCurrentRoute();
+          if (currentRoute) {
+            Sentry.addBreadcrumb({
+              category: 'navigation',
+              message: `Navigated to ${currentRoute.name}`,
+              level: 'info',
+              data: {
+                screen: currentRoute.name,
+                params: currentRoute.params,
+              },
+            });
+          }
         }
       }}
     >
