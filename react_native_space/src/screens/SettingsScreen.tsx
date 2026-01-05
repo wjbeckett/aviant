@@ -128,7 +128,7 @@ export const SettingsScreen = () => {
               }}
             />
             <HelperText type="info" visible>
-              Use HTTPS and port 8971. For self-signed certificates, install the certificate on your device first.
+              Use domain name or IP. Port 8971 auto-added for local IPs. Install self-signed certs first.
             </HelperText>
           </Card.Content>
         </Card>

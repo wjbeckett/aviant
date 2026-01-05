@@ -27,21 +27,20 @@ export const URLSetupScreen = () => {
       return;
     }
 
-    // Add protocol if missing - default to https for port 8971
+    // Add protocol if missing - default to https
     let finalUrl = trimmedUrl;
     if (!finalUrl.startsWith('http://') && !finalUrl.startsWith('https://')) {
-      // If it's a local IP without port, or has port 8971, use https
-      if (finalUrl.includes(':8971') || 
-          /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(finalUrl.split(':')[0])) {
-        finalUrl = `https://${finalUrl}`;
-      } else {
-        finalUrl = `https://${finalUrl}`;
-      }
+      finalUrl = `https://${finalUrl}`;
     }
 
-    // Add port 8971 if missing
-    if (!finalUrl.match(/:\d+/)) {
-      finalUrl = `${finalUrl}:8971`;
+    // Only add port 8971 for local IP addresses without a port specified
+    // (Remote URLs use standard HTTPS port 443 via reverse proxy)
+    const urlObj = new URL(finalUrl);
+    const isLocalIP = /^(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[01])\.)/.test(urlObj.hostname);
+    
+    if (isLocalIP && !urlObj.port) {
+      // Local IP without port - default to 8971
+      finalUrl = `${urlObj.protocol}//${urlObj.hostname}:8971${urlObj.pathname}`;
     }
 
     // Remove trailing slash
@@ -51,23 +50,23 @@ export const URLSetupScreen = () => {
     setLoading(true);
 
     try {
-      // Test connection to Frigate API using the health check endpoint
-      // This endpoint returns 200 OK without authentication
-      console.log('[URLSetup] Making request to:', `${finalUrl}/api/`);
+      // Test connection to Frigate using the /login endpoint
+      // This endpoint returns 200 OK without authentication (it's the login page)
+      console.log('[URLSetup] Making request to:', `${finalUrl}/login`);
       console.log('[URLSetup] Axios config:', {
         timeout: 10000,
-        headers: { 'Accept': 'application/json' }
+        headers: { 'Accept': '*/*' }
       });
       
-      const response = await axios.get(`${finalUrl}/api/`, {
+      const response = await axios.get(`${finalUrl}/login`, {
         timeout: 10000,
         validateStatus: (status) => status === 200, // Only accept 200 as success
         headers: {
-          'Accept': 'application/json',
+          'Accept': '*/*',
         },
       });
       
-      console.log('[URLSetup] Connection successful:', response.status, response.data);
+      console.log('[URLSetup] Connection successful:', response.status);
       
       Sentry.addBreadcrumb({
         category: 'auth',
@@ -151,7 +150,7 @@ export const URLSetupScreen = () => {
 
       Alert.alert(
         'Connection Failed',
-        `${errorMessage}\n\nMake sure:\n• Frigate is running\n• URL is correct (port 8971)\n• Device can reach the server\n• For Tailscale: Use your Tailscale hostname`
+        `${errorMessage}\n\nMake sure:\n• Frigate is running and accessible\n• URL is correct (domain or IP)\n• Network/firewall allows connection\n• For remote access: Use reverse proxy (Caddy/Nginx) or Tailscale`
       );
     } finally {
       setLoading(false);
@@ -186,7 +185,7 @@ export const URLSetupScreen = () => {
             value={url}
             onChangeText={setUrl}
             mode="outlined"
-            placeholder="your-frigate-nvr or 192.168.1.100"
+            placeholder="frigate.example.com or 192.168.1.100"
             autoCapitalize="none"
             autoCorrect={false}
             keyboardType="url"
@@ -197,7 +196,7 @@ export const URLSetupScreen = () => {
             }}
           />
           <HelperText type="info" visible>
-            Enter your Frigate server address (HTTPS port 8971 will be added automatically)
+            Enter domain name or IP address. Port 8971 auto-added for local IPs only.
           </HelperText>
 
           {/* Unified Action Button */}
