@@ -8,21 +8,45 @@ import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import * as Sentry from '@sentry/react-native';
 
 import { AuthProvider, useAuth } from './src/context/AuthContext';
+import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { AuthScreen } from './src/screens/AuthScreen';
 import { LiveCamerasScreen } from './src/screens/LiveCamerasScreen';
 import { EventsScreen } from './src/screens/EventsScreen';
 import { CameraLiveScreen } from './src/screens/CameraLiveScreen';
 import { EventDetailsScreen } from './src/screens/EventDetailsScreen';
 
+// Create routing instrumentation for performance monitoring
+const routingInstrumentation = new Sentry.ReactNavigationInstrumentation();
+
 // Initialize Sentry for error tracking (optional - only if DSN is configured)
 if (process.env.EXPO_PUBLIC_SENTRY_DSN) {
-  Sentry.init({
-    dsn: process.env.EXPO_PUBLIC_SENTRY_DSN,
-    enableInExpoDevelopment: false,
-    debug: __DEV__,
-    // Enable tracing
-    tracesSampleRate: 1.0,
-  });
+  try {
+    Sentry.init({
+      dsn: process.env.EXPO_PUBLIC_SENTRY_DSN,
+      enableInExpoDevelopment: false,
+      debug: __DEV__,
+      // Enable performance monitoring
+      tracesSampleRate: 1.0,
+      // Connect routing instrumentation
+      integrations: [
+        new Sentry.ReactNativeTracing({
+          routingInstrumentation,
+          tracingOrigins: ['localhost', /^\//],
+        }),
+      ],
+      // Enable crash reporting
+      enableAutoSessionTracking: true,
+      // Session tracking interval
+      sessionTrackingIntervalMillis: 30000,
+      // Add release version
+      release: 'aviant@1.0.0',
+      dist: '1',
+      // Add environment
+      environment: __DEV__ ? 'development' : 'production',
+    });
+  } catch (error) {
+    console.error('Failed to initialize Sentry:', error);
+  }
 }
 
 const Tab = createBottomTabNavigator();
@@ -76,6 +100,9 @@ function MainTabs() {
   );
 }
 
+// Create navigation ref for Sentry
+const navigationRef = React.createRef<any>();
+
 function AppNavigator() {
   const { isAuthenticated, isLoading } = useAuth();
 
@@ -84,7 +111,28 @@ function AppNavigator() {
   }
 
   return (
-    <NavigationContainer>
+    <NavigationContainer
+      ref={navigationRef}
+      onReady={() => {
+        // Register navigation container with Sentry
+        routingInstrumentation.registerNavigationContainer(navigationRef);
+      }}
+      onStateChange={() => {
+        // Track screen views
+        const currentRoute = navigationRef.current?.getCurrentRoute();
+        if (currentRoute) {
+          Sentry.addBreadcrumb({
+            category: 'navigation',
+            message: `Navigated to ${currentRoute.name}`,
+            level: 'info',
+            data: {
+              screen: currentRoute.name,
+              params: currentRoute.params,
+            },
+          });
+        }
+      }}
+    >
       {isAuthenticated ? (
         <Stack.Navigator screenOptions={{ headerShown: false }}>
           <Stack.Screen name="Main" component={MainTabs} />
@@ -102,12 +150,14 @@ function AppNavigator() {
 
 export default function App() {
   return (
-    <SafeAreaProvider>
-      <PaperProvider theme={theme}>
-        <AuthProvider>
-          <AppNavigator />
-        </AuthProvider>
-      </PaperProvider>
-    </SafeAreaProvider>
+    <ErrorBoundary>
+      <SafeAreaProvider>
+        <PaperProvider theme={theme}>
+          <AuthProvider>
+            <AppNavigator />
+          </AuthProvider>
+        </PaperProvider>
+      </SafeAreaProvider>
+    </ErrorBoundary>
   );
 }

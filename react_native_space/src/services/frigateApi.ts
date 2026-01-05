@@ -49,11 +49,29 @@ class FrigateApiService {
   private async testConnection(url: string): Promise<boolean> {
     try {
       console.log('[FrigateAPI] Testing connection to:', url);
+      Sentry.addBreadcrumb({
+        category: 'api',
+        message: 'Testing Frigate connection',
+        level: 'info',
+        data: { url },
+      });
       await axios.get(`${url}/api/version`, { timeout: 3000 });
       console.log('[FrigateAPI] Connection successful to:', url);
+      Sentry.addBreadcrumb({
+        category: 'api',
+        message: 'Connection successful',
+        level: 'info',
+        data: { url },
+      });
       return true;
     } catch (error) {
       console.log('[FrigateAPI] Connection failed to:', url);
+      Sentry.addBreadcrumb({
+        category: 'api',
+        message: 'Connection failed',
+        level: 'warning',
+        data: { url, error: (error as Error).message },
+      });
       return false;
     }
   }
