@@ -7,11 +7,7 @@ import { frigateApi } from '../services/frigateApi';
 // CookieManager only works on native platforms (iOS/Android), not web
 let CookieManager: any = null;
 if (Platform.OS !== 'web') {
-  try {
-    CookieManager = require('@react-native-cookies/cookies').default;
-  } catch (error) {
-    console.warn('CookieManager not available:', error);
-  }
+  CookieManager = require('@react-native-cookies/cookies').default;
 }
 
 type StreamType = 'webrtc' | 'mse' | 'mjpeg';

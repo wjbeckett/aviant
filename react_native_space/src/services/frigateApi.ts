@@ -6,11 +6,7 @@ import { Platform } from 'react-native';
 // CookieManager only works on native platforms (iOS/Android), not web
 let CookieManager: any = null;
 if (Platform.OS !== 'web') {
-  try {
-    CookieManager = require('@react-native-cookies/cookies').default;
-  } catch (error) {
-    console.warn('CookieManager not available:', error);
-  }
+  CookieManager = require('@react-native-cookies/cookies').default;
 }
 
 const FRIGATE_URL_KEY = 'frigate_url';
@@ -78,6 +74,7 @@ class FrigateApiService {
 
         console.log('[FrigateAPI] Login response status:', response.status);
         console.log('[FrigateAPI] Login response data:', JSON.stringify(response.data));
+        console.log('[FrigateAPI] Response headers:', JSON.stringify(response.headers, null, 2));
         
         // Frigate returns JWT in a cookie called "frigate_token"
         let token = null;
@@ -85,6 +82,7 @@ class FrigateApiService {
         // On native platforms (iOS/Android), use CookieManager to access cookies
         if (CookieManager && Platform.OS !== 'web') {
           try {
+            // Get cookies for the Frigate URL
             const urlObj = new URL(this.baseUrl);
             const cookies = await CookieManager.get(urlObj.origin);
             console.log('[FrigateAPI] All cookies:', JSON.stringify(cookies, null, 2));
