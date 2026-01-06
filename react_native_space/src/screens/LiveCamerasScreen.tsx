@@ -14,6 +14,7 @@ import { useAuth } from '../context/AuthContext';
 
 export const LiveCamerasScreen = ({ navigation }: any) => {
   const theme = useTheme();
+  const styles = createStyles(theme);
   const { logout } = useAuth();
   const [cameras, setCameras] = useState<Camera[]>([]);
   const [loading, setLoading] = useState(true);

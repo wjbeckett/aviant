@@ -218,7 +218,7 @@ export const URLSetupScreen = () => {
                 style={styles.settingsSection}
                 onPress={() => navigation.navigate('Settings')}
               >
-                <MaterialCommunityIcons name="cog" size={24} color={theme.colors.onPrimary} />
+                <MaterialCommunityIcons name="cog" size={24} color="#FFFFFF" />
               </Pressable>
 
               {/* Separator */}
@@ -231,7 +231,7 @@ export const URLSetupScreen = () => {
                 ) : (
                   <>
                     <Text style={styles.buttonText}>Next</Text>
-                    <MaterialCommunityIcons name="arrow-right" size={20} color={theme.colors.onPrimary} />
+                    <MaterialCommunityIcons name="arrow-right" size={20} color="#FFFFFF" />
                   </>
                 )}
               </View>
@@ -285,29 +285,34 @@ const createStyles = (theme: any) => StyleSheet.create({
     backgroundColor: theme.colors.primary,
     borderRadius: 12,
     overflow: 'hidden',
+    elevation: 2, // Add subtle shadow
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
   },
   unifiedButtonPressed: {
-    opacity: 0.8,
+    opacity: 0.85,
   },
   unifiedButtonDisabled: {
-    opacity: 0.6,
+    opacity: 0.5,
   },
   buttonContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    height: 56,
+    height: 48, // Reduced from 56 to 48 for sleeker look
   },
   settingsSection: {
-    width: 64,
+    width: 56, // Reduced from 64 to 56
     height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.1)',
+    backgroundColor: 'rgba(255, 255, 255, 0.15)', // Semi-transparent white works in both themes
   },
   separator: {
     width: 1,
     height: '60%',
-    backgroundColor: theme.dark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.1)',
+    backgroundColor: 'rgba(255, 255, 255, 0.3)', // Semi-transparent white separator
   },
   nextSection: {
     flex: 1,
@@ -317,7 +322,7 @@ const createStyles = (theme: any) => StyleSheet.create({
     gap: 8,
   },
   buttonText: {
-    color: theme.colors.onPrimary,
+    color: '#FFFFFF', // Force white color for both themes
     fontSize: 16,
     fontWeight: '600',
   },

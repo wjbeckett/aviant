@@ -3,7 +3,7 @@ import { MD3DarkTheme, MD3LightTheme } from 'react-native-paper';
 // Brand colors (same in both themes)
 const brandColors = {
   primary: '#2196F3',
-  secondary: '#00BCD4',
+  secondary: '#03A9F4', // Muted blue-cyan instead of bright cyan
   error: '#F44336',
   success: '#4CAF50',
   warning: '#FF9800',
@@ -12,6 +12,7 @@ const brandColors = {
 // Dark theme colors
 export const darkTheme = {
   ...MD3DarkTheme,
+  dark: true,
   colors: {
     ...MD3DarkTheme.colors,
     ...brandColors,
@@ -22,9 +23,11 @@ export const darkTheme = {
     surfaceVariant: '#2E2E2E',
     
     // Text
+    text: '#FFFFFF', // Primary text color
     onBackground: '#FFFFFF',
     onSurface: '#FFFFFF',
     onSurfaceVariant: '#9E9E9E',
+    onPrimary: '#FFFFFF', // White text on primary color
     
     // Borders
     outline: '#424242',
@@ -45,6 +48,7 @@ export const darkTheme = {
 // Light theme colors
 export const lightTheme = {
   ...MD3LightTheme,
+  dark: false,
   colors: {
     ...MD3LightTheme.colors,
     ...brandColors,
@@ -55,9 +59,11 @@ export const lightTheme = {
     surfaceVariant: '#F0F0F0',
     
     // Text
+    text: '#000000', // Primary text color
     onBackground: '#000000',
     onSurface: '#000000',
     onSurfaceVariant: '#5F6368',
+    onPrimary: '#FFFFFF', // White text on primary color
     
     // Borders
     outline: '#E0E0E0',
