@@ -7,8 +7,8 @@ import {
   TouchableOpacity,
   Alert,
   Modal,
-  SafeAreaView,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from 'react-native-paper';
@@ -78,10 +78,16 @@ function SettingsScreen({ route }: Props) {
 
   const handleTestSentry = () => {
     try {
-      if (!Sentry.captureException) {
+      // Check if Sentry native module is available
+      if (typeof Sentry.nativeCrash === 'undefined' || !Sentry.captureException) {
         Alert.alert(
           'Sentry Not Available',
-          'Sentry error tracking is not initialized. The native module may not be properly linked.',
+          'Sentry error tracking requires a native build (APK/IPA).\n\n' +
+          'It cannot run in Expo Go or web preview.\n\n' +
+          'To test Sentry:\n' +
+          '1. Build the app with npx expo run:android\n' +
+          '2. Install the APK on your device\n' +
+          '3. Test the Sentry integration',
           [{ text: 'OK' }]
         );
         return;

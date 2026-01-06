@@ -27,8 +27,9 @@ let sentryInitialized = false;
 
 if (process.env.EXPO_PUBLIC_SENTRY_DSN) {
   try {
-    // Check if Sentry native module is available
-    if (Sentry.nativeCrash) {
+    // Check if Sentry native module is available by checking if nativeCrash exists
+    // Use typeof check to avoid "Cannot read property 'prototype' of undefined" error
+    if (typeof Sentry.nativeCrash !== 'undefined' && Sentry.nativeCrash) {
       // Create routing instrumentation AFTER checking DSN exists
       routingInstrumentation = new Sentry.ReactNavigationInstrumentation();
       
@@ -58,7 +59,7 @@ if (process.env.EXPO_PUBLIC_SENTRY_DSN) {
       sentryInitialized = true;
       console.log('Sentry initialized successfully');
     } else {
-      console.warn('Sentry native module not available - skipping initialization');
+      console.warn('Sentry native module not available in Expo Go - build native app to enable');
     }
   } catch (error) {
     console.warn('Sentry initialization skipped:', error instanceof Error ? error.message : String(error));

@@ -12,6 +12,7 @@ import { frigateApi, Event } from '../services/frigateApi';
 
 export const EventsScreen = ({ navigation }: any) => {
   const theme = useTheme();
+  const styles = createStyles(theme);
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);

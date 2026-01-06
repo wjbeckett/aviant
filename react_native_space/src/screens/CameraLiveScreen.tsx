@@ -14,6 +14,7 @@ type StreamType = 'webrtc' | 'mse' | 'mjpeg';
 
 export const CameraLiveScreen = ({ route, navigation }: any) => {
   const theme = useTheme();
+  const styles = createStyles(theme);
   const { cameraName } = route.params;
   const [error, setError] = useState(false);
   const [streamType, setStreamType] = useState<StreamType>('mse'); // Start with MSE (best balance of quality and compatibility)
