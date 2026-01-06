@@ -36,9 +36,9 @@
       [
         "@sentry/react-native",
         {
-          "organization": "your-org-slug",
+          "organization": "wb-n2",
           "project": "aviant",
-          "uploadSourceMaps": false
+          "uploadSourceMaps": true
         }
       ],
       [
@@ -49,7 +49,8 @@
             "networkSecurityConfig": "./android/app/src/main/res/xml/network_security_config.xml"
           }
         }
-      ]
+      ],
+      "react-native-video"
     ]
   }
 }

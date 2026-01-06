@@ -3,6 +3,7 @@ import { View, StyleSheet, Platform } from 'react-native';
 import { Text, IconButton, SegmentedButtons , useTheme } from 'react-native-paper';
 import { WebView } from 'react-native-webview';
 import { frigateApi } from '../services/frigateApi';
+import * as Sentry from '@sentry/react-native';
 
 // CookieManager only works on native platforms (iOS/Android), not web
 let CookieManager: any = null;
@@ -17,6 +18,7 @@ export const CameraLiveScreen = ({ route, navigation }: any) => {
   const styles = createStyles(theme);
   const { cameraName } = route.params;
   const [error, setError] = useState(false);
+  const [errorDetails, setErrorDetails] = useState<string>('');
   const [streamType, setStreamType] = useState<StreamType>('mse'); // Start with MSE (best balance of quality and compatibility)
 
   const baseUrl = frigateApi.getBaseUrl();
@@ -421,35 +423,109 @@ export const CameraLiveScreen = ({ route, navigation }: any) => {
         onError={(syntheticEvent) => {
           const { nativeEvent } = syntheticEvent;
           console.error('[CameraLive] WebView error:', nativeEvent);
+          const errorMsg = `WebView error: ${nativeEvent.description || 'Unknown error'}`;
+          setErrorDetails(errorMsg);
           setError(true);
+          
+          // Report to Sentry
+          try {
+            Sentry.captureException(new Error(errorMsg), {
+              contexts: {
+                webview: {
+                  camera: cameraName,
+                  streamType: streamType,
+                  baseUrl: baseUrl,
+                  nativeEvent: nativeEvent,
+                },
+              },
+            });
+          } catch (e) {
+            console.error('[CameraLive] Failed to report to Sentry:', e);
+          }
         }}
         onMessage={(event) => {
           try {
             const data = JSON.parse(event.nativeEvent.data);
             console.log('[CameraLive] Message from WebView:', data);
+            
             if (data.type === 'stream_error') {
+              const errorMsg = data.error || 'Unknown stream error';
+              setErrorDetails(`${streamType.toUpperCase()}: ${errorMsg}`);
               setError(true);
+              
+              // Report stream errors to Sentry
+              try {
+                Sentry.captureException(new Error(`Stream error: ${errorMsg}`), {
+                  contexts: {
+                    stream: {
+                      camera: cameraName,
+                      streamType: streamType,
+                      baseUrl: baseUrl,
+                      wsBaseUrl: wsBaseUrl,
+                    },
+                  },
+                });
+              } catch (e) {
+                console.error('[CameraLive] Failed to report to Sentry:', e);
+              }
             } else if (data.type === 'stream_loaded') {
               setError(false);
+              setErrorDetails('');
             }
           } catch (e) {
             console.error('[CameraLive] Failed to parse WebView message:', e);
           }
         }}
-        onLoadStart={() => console.log('[CameraLive] WebView load started')}
+        onHttpError={(syntheticEvent) => {
+          const { nativeEvent } = syntheticEvent;
+          console.error('[CameraLive] HTTP error:', nativeEvent.statusCode, nativeEvent.url);
+          setErrorDetails(`HTTP ${nativeEvent.statusCode}: ${nativeEvent.url}`);
+          setError(true);
+        }}
+        onLoadStart={() => {
+          console.log('[CameraLive] WebView load started');
+          setError(false);
+          setErrorDetails('');
+        }}
         onLoadEnd={() => console.log('[CameraLive] WebView load ended')}
+        // Enable WebView debugging and console forwarding
+        onConsoleMessage={(event) => {
+          const msg = event.nativeEvent.message;
+          console.log(`[CameraLive WebView Console]: ${msg}`);
+          
+          // Forward errors to Sentry
+          if (msg.toLowerCase().includes('error') || msg.toLowerCase().includes('failed')) {
+            try {
+              Sentry.addBreadcrumb({
+                message: `WebView console: ${msg}`,
+                level: 'error',
+                data: {
+                  camera: cameraName,
+                  streamType: streamType,
+                },
+              });
+            } catch (e) {
+              // Ignore Sentry errors
+            }
+          }
+        }}
         allowsInlineMediaPlayback
         mediaPlaybackRequiresUserAction={false}
         javaScriptEnabled
         domStorageEnabled
         thirdPartyCookiesEnabled
         sharedCookiesEnabled
+        // Enable remote debugging for release builds (helps troubleshoot issues)
+        webviewDebuggingEnabled={true}
       />
 
       {error && (
         <View style={styles.errorContainer}>
           <Text style={styles.errorText}>Failed to load stream</Text>
-          <Text style={styles.errorHint}>Try switching to a different quality</Text>
+          {errorDetails ? (
+            <Text style={styles.errorDetails}>{errorDetails}</Text>
+          ) : null}
+          <Text style={styles.errorHint}>Try switching to a different stream type</Text>
         </View>
       )}
     </View>
@@ -501,6 +577,14 @@ const createStyles = (theme: any) => StyleSheet.create({
     color: theme.colors.error,
     fontSize: 16,
     marginBottom: 8,
+    fontWeight: 'bold',
+  },
+  errorDetails: {
+    color: theme.colors.error,
+    fontSize: 13,
+    marginBottom: 12,
+    opacity: 0.8,
+    textAlign: 'center',
   },
   errorHint: {
     color: theme.colors.onSurfaceVariant,

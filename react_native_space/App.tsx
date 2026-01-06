@@ -16,7 +16,18 @@ import { LoginScreen } from './src/screens/LoginScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import { LiveCamerasScreen } from './src/screens/LiveCamerasScreen';
 import { EventsScreen } from './src/screens/EventsScreen';
-import { CameraLiveScreen } from './src/screens/CameraLiveScreen';
+// Camera streaming implementations:
+// 1. CameraLiveScreenNative - Native video player with RTSP/HLS (RECOMMENDED - TRUE NATIVE)
+// 2. CameraLiveScreenSimple - Embeds Frigate PWA (WebView)
+// 3. CameraLiveScreenMJPEG - MJPEG only (simple, reliable)
+// 4. CameraLiveScreen - Complex WebRTC/MSE in WebView (not recommended)
+import { CameraLiveScreen } from './src/screens/CameraLiveScreen'; // Complex WebView version
+import { CameraLiveScreenSimple } from './src/screens/CameraLiveScreen_SIMPLE'; // Frigate PWA in WebView
+import { CameraLiveScreenMJPEG } from './src/screens/CameraLiveScreen_MJPEG'; // MJPEG in WebView
+import { CameraLiveScreenNative } from './src/screens/CameraLiveScreen_NATIVE'; // NATIVE VIDEO PLAYER
+
+// Choose which implementation to use:
+const CameraLiveComponent = CameraLiveScreenNative; // TRUE NATIVE - Uses AVPlayer/ExoPlayer!
 import { EventDetailsScreen } from './src/screens/EventDetailsScreen';
 import { darkTheme, lightTheme } from './src/theme/theme';
 
@@ -181,7 +192,7 @@ function AppNavigator({ themePreference, onThemeChange }: AppNavigatorProps) {
           <Stack.Screen name="Main">
             {() => <MainTabs themePreference={themePreference} onThemeChange={onThemeChange} />}
           </Stack.Screen>
-          <Stack.Screen name="CameraLive" component={CameraLiveScreen} />
+          <Stack.Screen name="CameraLive" component={CameraLiveComponent} />
           <Stack.Screen name="EventDetails" component={EventDetailsScreen} />
         </Stack.Navigator>
       ) : (
