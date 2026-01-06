@@ -128,7 +128,7 @@ export const SettingsScreen = () => {
               }}
             />
             <HelperText type="info" visible>
-              Use domain name or IP. Port 8971 auto-added for local IPs. Install self-signed certs first.
+              Use HTTPS and port 8971 for secure remote access
             </HelperText>
           </Card.Content>
         </Card>
@@ -156,31 +156,6 @@ export const SettingsScreen = () => {
 
         <Divider style={styles.divider} />
 
-        {/* SSL Certificate Help */}
-        <Card style={styles.card}>
-          <Card.Content>
-            <Text variant="titleMedium" style={styles.sectionTitle}>
-              Self-Signed Certificates
-            </Text>
-            <Text variant="bodySmall" style={styles.helpText}>
-              If your Frigate server uses a self-signed SSL certificate, you'll need to install it on your Android device:
-            </Text>
-            <Text variant="bodySmall" style={styles.helpStep}>
-              1. Get the certificate from your server{'\n'}
-              2. Settings → Security → Encryption & credentials{'\n'}
-              3. Install a certificate → CA certificate{'\n'}
-              4. Select your certificate file{'\n'}
-              5. Return to this app
-            </Text>
-            <Text variant="bodySmall" style={styles.helpText}>
-              Alternative solutions:{'\n'}
-              • Use Caddy, Nginx, or Traefik with Let's Encrypt{'\n'}
-              • Access via Tailscale with MagicDNS{'\n'}
-              • Use ngrok or Cloudflare Tunnel
-            </Text>
-          </Card.Content>
-        </Card>
-
         {/* About Section */}
         <Card style={styles.card}>
           <Card.Content>
@@ -193,49 +168,6 @@ export const SettingsScreen = () => {
             <Text variant="bodySmall" style={styles.aboutDescription}>
               A mobile client for Frigate NVR. Not officially associated with Frigate.
             </Text>
-          </Card.Content>
-        </Card>
-
-        {/* Diagnostics Section */}
-        <Card style={styles.card}>
-          <Card.Content>
-            <Text variant="titleMedium" style={styles.sectionTitle}>
-              Diagnostics
-            </Text>
-            <Text variant="bodySmall" style={styles.helpText}>
-              Test error tracking to verify Sentry integration is working correctly.
-            </Text>
-            <Button
-              mode="outlined"
-              onPress={() => {
-                try {
-                  // Send test error
-                  Sentry.captureException(new Error('Test error from Aviant Settings'));
-                  
-                  // Send test message
-                  Sentry.captureMessage('Test message from Aviant Settings', 'info');
-                  
-                  // Add breadcrumb
-                  Sentry.addBreadcrumb({
-                    category: 'test',
-                    message: 'User tested Sentry integration',
-                    level: 'info',
-                  });
-                  
-                  Alert.alert(
-                    'Test Sent',
-                    'A test error and message were sent to Sentry. Check your Sentry dashboard in a few seconds.',
-                    [{ text: 'OK' }]
-                  );
-                } catch (error) {
-                  Alert.alert('Error', 'Failed to send test event to Sentry');
-                }
-              }}
-              icon="bug"
-              style={styles.testButton}
-            >
-              Test Error Tracking
-            </Button>
           </Card.Content>
         </Card>
 
@@ -310,27 +242,12 @@ const styles = StyleSheet.create({
     marginVertical: 8,
     backgroundColor: '#424242',
   },
-  helpText: {
-    color: '#9E9E9E',
-    lineHeight: 20,
-    marginBottom: 12,
-  },
-  helpStep: {
-    color: '#FFFFFF',
-    lineHeight: 22,
-    marginBottom: 12,
-    fontFamily: 'monospace',
-  },
   aboutText: {
     color: '#FFFFFF',
     marginBottom: 4,
   },
   aboutDescription: {
     color: '#9E9E9E',
-  },
-  testButton: {
-    marginTop: 8,
-    borderRadius: 8,
   },
   saveButton: {
     marginTop: 16,

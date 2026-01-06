@@ -10,7 +10,7 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#000000"
+      "backgroundColor": "#121212"
     },
     "ios": {
       "supportsTablet": true,
@@ -20,7 +20,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#000000"
+        "backgroundColor": "#121212"
       },
       "package": "com.aviant.app",
       "versionCode": 1,
@@ -39,15 +39,6 @@
           "organization": "your-org-slug",
           "project": "aviant",
           "uploadSourceMaps": false
-        }
-      ],
-      [
-        "expo-build-properties",
-        {
-          "android": {
-            "usesCleartextTraffic": true,
-            "networkSecurityConfig": "./android/app/src/main/res/xml/network_security_config.xml"
-          }
         }
       ]
     ]
