@@ -2,3 +2,4 @@ android/
 .expo/
 node_modules/
 /android/
+.DS_Store
