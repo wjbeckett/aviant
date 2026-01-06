@@ -1,6 +1,7 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, useColorScheme, Appearance } from 'react-native';
 import * as Sentry from '@sentry/react-native';
+import { darkTheme, lightTheme } from '../theme/theme';
 
 interface Props {
   children: React.ReactNode;
@@ -39,6 +40,11 @@ export class ErrorBoundary extends React.Component<Props, State> {
 
   render() {
     if (this.state.hasError) {
+      // Get current color scheme
+      const colorScheme = Appearance.getColorScheme();
+      const theme = colorScheme === 'dark' ? darkTheme : lightTheme;
+      const styles = createStyles(theme);
+      
       return (
         <View style={styles.container}>
           <Text style={styles.title}>Oops! Something went wrong</Text>
@@ -56,34 +62,34 @@ export class ErrorBoundary extends React.Component<Props, State> {
   }
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: any) => StyleSheet.create({
   container: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#121212',
+    backgroundColor: theme.colors.background,
     padding: 20,
   },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#fff',
+    color: theme.colors.onBackground,
     marginBottom: 16,
   },
   message: {
     fontSize: 16,
-    color: '#ccc',
+    color: theme.colors.onSurfaceVariant,
     textAlign: 'center',
     marginBottom: 32,
   },
   button: {
-    backgroundColor: '#2196F3',
+    backgroundColor: theme.colors.primary,
     paddingHorizontal: 32,
     paddingVertical: 12,
     borderRadius: 8,
   },
   buttonText: {
-    color: '#fff',
+    color: theme.colors.onPrimary,
     fontSize: 16,
     fontWeight: '600',
   },

@@ -14,7 +14,7 @@ import {
   Divider,
   HelperText,
   Card,
-} from 'react-native-paper';
+, useTheme } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 import * as SecureStore from 'expo-secure-store';
 import * as Sentry from '@sentry/react-native';
@@ -23,7 +23,9 @@ const REMOTE_URL_KEY = 'frigate_remote_url';
 const URL_SWITCHING_ENABLED_KEY = 'url_switching_enabled';
 
 export const SettingsScreen = () => {
+  const theme = useTheme();
   const navigation = useNavigation();
+  const styles = createStyles(theme);
   const [remoteUrl, setRemoteUrl] = useState('');
   const [urlSwitchingEnabled, setUrlSwitchingEnabled] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -92,7 +94,7 @@ export const SettingsScreen = () => {
         <IconButton
           icon="arrow-left"
           size={24}
-          iconColor="#FFFFFF"
+          iconColor={theme.colors.onSurface}
           onPress={() => navigation.goBack()}
         />
         <Text variant="headlineMedium" style={styles.headerTitle}>
@@ -128,7 +130,7 @@ export const SettingsScreen = () => {
               }}
             />
             <HelperText type="info" visible>
-              Use HTTPS and port 8971 for secure remote access
+              Use domain name or IP. Port 8971 auto-added for local IPs. Install self-signed certs first.
             </HelperText>
           </Card.Content>
         </Card>
@@ -148,13 +150,38 @@ export const SettingsScreen = () => {
               <Switch
                 value={urlSwitchingEnabled}
                 onValueChange={setUrlSwitchingEnabled}
-                color="#2196F3"
+                color={theme.colors.primary}
               />
             </View>
           </Card.Content>
         </Card>
 
         <Divider style={styles.divider} />
+
+        {/* SSL Certificate Help */}
+        <Card style={styles.card}>
+          <Card.Content>
+            <Text variant="titleMedium" style={styles.sectionTitle}>
+              Self-Signed Certificates
+            </Text>
+            <Text variant="bodySmall" style={styles.helpText}>
+              If your Frigate server uses a self-signed SSL certificate, you'll need to install it on your Android device:
+            </Text>
+            <Text variant="bodySmall" style={styles.helpStep}>
+              1. Get the certificate from your server{'\n'}
+              2. Settings → Security → Encryption & credentials{'\n'}
+              3. Install a certificate → CA certificate{'\n'}
+              4. Select your certificate file{'\n'}
+              5. Return to this app
+            </Text>
+            <Text variant="bodySmall" style={styles.helpText}>
+              Alternative solutions:{'\n'}
+              • Use Caddy, Nginx, or Traefik with Let's Encrypt{'\n'}
+              • Access via Tailscale with MagicDNS{'\n'}
+              • Use ngrok or Cloudflare Tunnel
+            </Text>
+          </Card.Content>
+        </Card>
 
         {/* About Section */}
         <Card style={styles.card}>
@@ -168,6 +195,49 @@ export const SettingsScreen = () => {
             <Text variant="bodySmall" style={styles.aboutDescription}>
               A mobile client for Frigate NVR. Not officially associated with Frigate.
             </Text>
+          </Card.Content>
+        </Card>
+
+        {/* Diagnostics Section */}
+        <Card style={styles.card}>
+          <Card.Content>
+            <Text variant="titleMedium" style={styles.sectionTitle}>
+              Diagnostics
+            </Text>
+            <Text variant="bodySmall" style={styles.helpText}>
+              Test error tracking to verify Sentry integration is working correctly.
+            </Text>
+            <Button
+              mode="outlined"
+              onPress={() => {
+                try {
+                  // Send test error
+                  Sentry.captureException(new Error('Test error from Aviant Settings'));
+                  
+                  // Send test message
+                  Sentry.captureMessage('Test message from Aviant Settings', 'info');
+                  
+                  // Add breadcrumb
+                  Sentry.addBreadcrumb({
+                    category: 'test',
+                    message: 'User tested Sentry integration',
+                    level: 'info',
+                  });
+                  
+                  Alert.alert(
+                    'Test Sent',
+                    'A test error and message were sent to Sentry. Check your Sentry dashboard in a few seconds.',
+                    [{ text: 'OK' }]
+                  );
+                } catch (error) {
+                  Alert.alert('Error', 'Failed to send test event to Sentry');
+                }
+              }}
+              icon="bug"
+              style={styles.testButton}
+            >
+              Test Error Tracking
+            </Button>
           </Card.Content>
         </Card>
 
@@ -188,10 +258,10 @@ export const SettingsScreen = () => {
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (theme: any) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#121212',
+    backgroundColor: theme.colors.background,
   },
   header: {
     flexDirection: 'row',
@@ -200,10 +270,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingTop: 48,
     paddingBottom: 16,
-    backgroundColor: '#1E1E1E',
+    backgroundColor: theme.colors.surface,
   },
   headerTitle: {
-    color: '#FFFFFF',
+    color: theme.colors.onSurface,
     fontWeight: 'bold',
   },
   content: {
@@ -212,10 +282,10 @@ const styles = StyleSheet.create({
   },
   card: {
     marginBottom: 16,
-    backgroundColor: '#1E1E1E',
+    backgroundColor: theme.colors.surface,
   },
   sectionTitle: {
-    color: '#FFFFFF',
+    color: theme.colors.onSurface,
     marginBottom: 8,
   },
   input: {
@@ -232,22 +302,37 @@ const styles = StyleSheet.create({
     marginRight: 16,
   },
   switchTitle: {
-    color: '#FFFFFF',
+    color: theme.colors.onSurface,
     marginBottom: 4,
   },
   switchDescription: {
-    color: '#9E9E9E',
+    color: theme.colors.onSurfaceVariant,
   },
   divider: {
     marginVertical: 8,
-    backgroundColor: '#424242',
+    backgroundColor: theme.colors.outline,
+  },
+  helpText: {
+    color: theme.colors.onSurfaceVariant,
+    lineHeight: 20,
+    marginBottom: 12,
+  },
+  helpStep: {
+    color: theme.colors.onSurface,
+    lineHeight: 22,
+    marginBottom: 12,
+    fontFamily: 'monospace',
   },
   aboutText: {
-    color: '#FFFFFF',
+    color: theme.colors.onSurface,
     marginBottom: 4,
   },
   aboutDescription: {
-    color: '#9E9E9E',
+    color: theme.colors.onSurfaceVariant,
+  },
+  testButton: {
+    marginTop: 8,
+    borderRadius: 8,
   },
   saveButton: {
     marginTop: 16,

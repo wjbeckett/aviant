@@ -1,11 +1,13 @@
 import React from 'react';
+import { useColorScheme } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { Provider as PaperProvider, MD3DarkTheme } from 'react-native-paper';
+import { Provider as PaperProvider } from 'react-native-paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import * as Sentry from '@sentry/react-native';
+import * as SystemUI from 'expo-system-ui';
 
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
@@ -16,6 +18,7 @@ import { LiveCamerasScreen } from './src/screens/LiveCamerasScreen';
 import { EventsScreen } from './src/screens/EventsScreen';
 import { CameraLiveScreen } from './src/screens/CameraLiveScreen';
 import { EventDetailsScreen } from './src/screens/EventDetailsScreen';
+import { darkTheme, lightTheme } from './src/theme/theme';
 
 // Initialize Sentry for error tracking (optional - only if DSN is configured)
 // IMPORTANT: Must be done before creating any instrumentation
@@ -57,28 +60,20 @@ if (process.env.EXPO_PUBLIC_SENTRY_DSN) {
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
 
-const theme = {
-  ...MD3DarkTheme,
-  colors: {
-    ...MD3DarkTheme.colors,
-    primary: '#2196F3',
-    secondary: '#00BCD4',
-    background: '#121212',
-    surface: '#1E1E1E',
-  },
-};
-
 function MainTabs() {
+  const colorScheme = useColorScheme();
+  const theme = colorScheme === 'dark' ? darkTheme : lightTheme;
+  
   return (
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
         tabBarStyle: {
-          backgroundColor: '#1E1E1E',
-          borderTopColor: '#2E2E2E',
+          backgroundColor: theme.colors.surface,
+          borderTopColor: theme.colors.outlineVariant,
         },
-        tabBarActiveTintColor: '#2196F3',
-        tabBarInactiveTintColor: '#9E9E9E',
+        tabBarActiveTintColor: theme.colors.primary,
+        tabBarInactiveTintColor: theme.colors.onSurfaceVariant,
       }}
     >
       <Tab.Screen
@@ -160,6 +155,14 @@ function AppNavigator() {
 }
 
 export default function App() {
+  const colorScheme = useColorScheme();
+  const theme = colorScheme === 'dark' ? darkTheme : lightTheme;
+  
+  // Set system UI colors to match theme
+  React.useEffect(() => {
+    SystemUI.setBackgroundColorAsync(theme.colors.background);
+  }, [colorScheme]);
+  
   return (
     <ErrorBoundary>
       <SafeAreaProvider>

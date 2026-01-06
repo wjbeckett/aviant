@@ -7,10 +7,11 @@ import {
   Platform,
   Linking,
 } from 'react-native';
-import { Text, Button, ActivityIndicator, IconButton } from 'react-native-paper';
+import { Text, Button, ActivityIndicator, IconButton , useTheme } from 'react-native-paper';
 import { frigateApi, Event } from '../services/frigateApi';
 
 export const EventDetailsScreen = ({ route, navigation }: any) => {
+  const theme = useTheme();
   const { eventId } = route.params;
   const [event, setEvent] = useState<Event | null>(null);
   const [loading, setLoading] = useState(true);
@@ -152,27 +153,27 @@ export const EventDetailsScreen = ({ route, navigation }: any) => {
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (theme: any) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#121212',
+    backgroundColor: theme.colors.background,
   },
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#121212',
+    backgroundColor: theme.colors.background,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#1E1E1E',
+    backgroundColor: theme.colors.surface,
     paddingHorizontal: 8,
     paddingTop: Platform.OS === 'ios' ? 44 : 0,
   },
   title: {
-    color: '#FFF',
+    color: theme.colors.onSurface,
     flex: 1,
     textAlign: 'center',
   },
@@ -190,7 +191,7 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   detailsContainer: {
-    backgroundColor: '#1E1E1E',
+    backgroundColor: theme.colors.surface,
     borderRadius: 12,
     padding: 16,
     marginBottom: 24,
@@ -201,13 +202,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#2E2E2E',
+    borderBottomColor: theme.colors.outlineVariant,
   },
   label: {
-    color: '#9E9E9E',
+    color: theme.colors.onSurfaceVariant,
   },
   value: {
-    color: '#FFFFFF',
+    color: theme.colors.onSurface,
     textTransform: 'capitalize',
   },
   actions: {
@@ -218,9 +219,9 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     marginTop: 16,
-    color: '#9E9E9E',
+    color: theme.colors.onSurfaceVariant,
   },
   errorText: {
-    color: '#F44336',
+    color: theme.colors.error,
   },
 });

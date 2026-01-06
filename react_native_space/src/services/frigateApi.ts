@@ -1,6 +1,13 @@
 import axios, { AxiosInstance, AxiosError } from 'axios';
 import * as SecureStore from 'expo-secure-store';
 import * as Sentry from '@sentry/react-native';
+import { Platform } from 'react-native';
+
+// CookieManager only works on native platforms (iOS/Android), not web
+let CookieManager: any = null;
+if (Platform.OS !== 'web') {
+  CookieManager = require('@react-native-cookies/cookies').default;
+}
 
 const FRIGATE_URL_KEY = 'frigate_url';
 const FRIGATE_USERNAME_KEY = 'frigate_username';
@@ -65,12 +72,70 @@ class FrigateApiService {
           }
         );
 
-        console.log('[FrigateAPI] Login response:', response.status, response.data);
+        console.log('[FrigateAPI] Login response status:', response.status);
+        console.log('[FrigateAPI] Login response data:', JSON.stringify(response.data));
+        console.log('[FrigateAPI] Response headers:', JSON.stringify(response.headers, null, 2));
         
-        const token = response.data?.access_token || 
-                      response.data?.token || 
-                      response.data?.jwt ||
-                      response.data?.accessToken;
+        // Frigate returns JWT in a cookie called "frigate_token"
+        let token = null;
+        
+        // CRITICAL: axios and CookieManager use SEPARATE cookie storage in React Native
+        // We must parse the Set-Cookie header directly from the response
+        const setCookieHeader = response.headers['set-cookie'];
+        console.log('[FrigateAPI] Set-Cookie header:', setCookieHeader);
+        
+        if (setCookieHeader) {
+          // Set-Cookie can be a string or array
+          const cookies = Array.isArray(setCookieHeader) ? setCookieHeader : [setCookieHeader];
+          console.log('[FrigateAPI] Parsing cookies:', cookies);
+          
+          // Find frigate_token cookie
+          for (const cookie of cookies) {
+            const match = cookie.match(/frigate_token=([^;]+)/);
+            if (match) {
+              token = match[1];
+              console.log('[FrigateAPI] Extracted token from Set-Cookie header (length:', token.length, ')');
+              
+              // Also store in CookieManager for WebView to use
+              if (CookieManager && Platform.OS !== 'web') {
+                try {
+                  const urlObj = new URL(this.baseUrl);
+                  await CookieManager.set(urlObj.origin, {
+                    name: 'frigate_token',
+                    value: token,
+                    path: '/',
+                    secure: urlObj.protocol === 'https:',
+                    httpOnly: false, // WebView needs to access it
+                  });
+                  console.log('[FrigateAPI] Stored token in CookieManager for WebView');
+                } catch (error) {
+                  console.warn('[FrigateAPI] Failed to store in CookieManager:', error);
+                }
+              }
+              break;
+            }
+          }
+        }
+        
+        // On web or if CookieManager failed, try to extract token from response body
+        if (!token) {
+          token = response.data?.access_token || 
+                  response.data?.token || 
+                  response.data?.jwt ||
+                  response.data?.accessToken;
+          
+          if (token) {
+            console.log('[FrigateAPI] Found token in response body (length:', token.length, ')');
+          } else {
+            // On web, cookies are automatically managed by the browser
+            // We'll assume authentication succeeded if we got a 200 response
+            if (Platform.OS === 'web') {
+              console.log('[FrigateAPI] Web platform: cookies managed by browser, assuming auth successful');
+              // Create a dummy token for web (won't be used, cookies handle auth)
+              token = 'web-cookie-auth';
+            }
+          }
+        }
         
         if (!token) {
           const errorMsg = 'No authentication token received from Frigate';
@@ -85,6 +150,8 @@ class FrigateApiService {
           });
           throw new Error(errorMsg);
         }
+        
+        console.log('[FrigateAPI] Successfully extracted token (length:', token.length, ')');
 
         this.jwtToken = token;
 
@@ -194,10 +261,24 @@ class FrigateApiService {
   }
 
   async clearSession(): Promise<void> {
+    // Clear cookies (native platforms only)
+    if (CookieManager && this.baseUrl && Platform.OS !== 'web') {
+      try {
+        const urlObj = new URL(this.baseUrl);
+        await CookieManager.clearByName(urlObj.origin, 'frigate_token');
+        console.log('[FrigateAPI] Cleared frigate_token cookie');
+      } catch (error) {
+        console.error('[FrigateAPI] Error clearing cookies:', error);
+      }
+    }
+    
+    // Clear stored credentials
     await SecureStore.deleteItemAsync(FRIGATE_URL_KEY);
     await SecureStore.deleteItemAsync(FRIGATE_USERNAME_KEY);
     await SecureStore.deleteItemAsync(FRIGATE_PASSWORD_KEY);
     await SecureStore.deleteItemAsync(FRIGATE_JWT_TOKEN_KEY);
+    
+    // Reset state
     this.client = null;
     this.baseUrl = '';
     this.jwtToken = null;
