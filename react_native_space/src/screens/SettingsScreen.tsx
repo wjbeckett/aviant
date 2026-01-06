@@ -14,7 +14,8 @@ import {
   Divider,
   HelperText,
   Card,
-, useTheme } from 'react-native-paper';
+  useTheme
+} from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 import * as SecureStore from 'expo-secure-store';
 import * as Sentry from '@sentry/react-native';
