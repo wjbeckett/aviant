@@ -196,6 +196,49 @@ export const SettingsScreen = () => {
           </Card.Content>
         </Card>
 
+        {/* Diagnostics Section */}
+        <Card style={styles.card}>
+          <Card.Content>
+            <Text variant="titleMedium" style={styles.sectionTitle}>
+              Diagnostics
+            </Text>
+            <Text variant="bodySmall" style={styles.helpText}>
+              Test error tracking to verify Sentry integration is working correctly.
+            </Text>
+            <Button
+              mode="outlined"
+              onPress={() => {
+                try {
+                  // Send test error
+                  Sentry.captureException(new Error('Test error from Aviant Settings'));
+                  
+                  // Send test message
+                  Sentry.captureMessage('Test message from Aviant Settings', 'info');
+                  
+                  // Add breadcrumb
+                  Sentry.addBreadcrumb({
+                    category: 'test',
+                    message: 'User tested Sentry integration',
+                    level: 'info',
+                  });
+                  
+                  Alert.alert(
+                    'Test Sent',
+                    'A test error and message were sent to Sentry. Check your Sentry dashboard in a few seconds.',
+                    [{ text: 'OK' }]
+                  );
+                } catch (error) {
+                  Alert.alert('Error', 'Failed to send test event to Sentry');
+                }
+              }}
+              icon="bug"
+              style={styles.testButton}
+            >
+              Test Error Tracking
+            </Button>
+          </Card.Content>
+        </Card>
+
         {/* Save Button */}
         <Button
           mode="contained"
@@ -284,6 +327,10 @@ const styles = StyleSheet.create({
   },
   aboutDescription: {
     color: '#9E9E9E',
+  },
+  testButton: {
+    marginTop: 8,
+    borderRadius: 8,
   },
   saveButton: {
     marginTop: 16,

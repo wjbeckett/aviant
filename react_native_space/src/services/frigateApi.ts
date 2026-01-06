@@ -79,21 +79,41 @@ class FrigateApiService {
         // Frigate returns JWT in a cookie called "frigate_token"
         let token = null;
         
-        // On native platforms (iOS/Android), use CookieManager to access cookies
-        if (CookieManager && Platform.OS !== 'web') {
-          try {
-            // Get cookies for the Frigate URL
-            const urlObj = new URL(this.baseUrl);
-            const cookies = await CookieManager.get(urlObj.origin);
-            console.log('[FrigateAPI] All cookies:', JSON.stringify(cookies, null, 2));
-            
-            // Extract the frigate_token cookie
-            if (cookies.frigate_token) {
-              token = cookies.frigate_token.value;
-              console.log('[FrigateAPI] Found frigate_token cookie (length:', token.length, ')');
+        // CRITICAL: axios and CookieManager use SEPARATE cookie storage in React Native
+        // We must parse the Set-Cookie header directly from the response
+        const setCookieHeader = response.headers['set-cookie'];
+        console.log('[FrigateAPI] Set-Cookie header:', setCookieHeader);
+        
+        if (setCookieHeader) {
+          // Set-Cookie can be a string or array
+          const cookies = Array.isArray(setCookieHeader) ? setCookieHeader : [setCookieHeader];
+          console.log('[FrigateAPI] Parsing cookies:', cookies);
+          
+          // Find frigate_token cookie
+          for (const cookie of cookies) {
+            const match = cookie.match(/frigate_token=([^;]+)/);
+            if (match) {
+              token = match[1];
+              console.log('[FrigateAPI] Extracted token from Set-Cookie header (length:', token.length, ')');
+              
+              // Also store in CookieManager for WebView to use
+              if (CookieManager && Platform.OS !== 'web') {
+                try {
+                  const urlObj = new URL(this.baseUrl);
+                  await CookieManager.set(urlObj.origin, {
+                    name: 'frigate_token',
+                    value: token,
+                    path: '/',
+                    secure: urlObj.protocol === 'https:',
+                    httpOnly: false, // WebView needs to access it
+                  });
+                  console.log('[FrigateAPI] Stored token in CookieManager for WebView');
+                } catch (error) {
+                  console.warn('[FrigateAPI] Failed to store in CookieManager:', error);
+                }
+              }
+              break;
             }
-          } catch (cookieError) {
-            console.error('[FrigateAPI] Error reading cookies:', cookieError);
           }
         }
         
