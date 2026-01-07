@@ -16,53 +16,39 @@ import { LoginScreen } from './src/screens/LoginScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import { LiveCamerasScreen } from './src/screens/LiveCamerasScreen';
 import { EventsScreen } from './src/screens/EventsScreen';
-// Camera streaming implementation:
-// Unified WebRTC screen with timeline integration
-import { CameraLiveScreenWebRTC } from './src/screens/CameraLiveScreen_WEBRTC';
+// Camera streaming implementations:
+// 1. CameraLiveScreenNative - Native video player with RTSP/HLS (RECOMMENDED - TRUE NATIVE)
+// 2. CameraLiveScreenSimple - Embeds Frigate PWA (WebView)
+// 3. CameraLiveScreenMJPEG - MJPEG only (simple, reliable)
+// 4. CameraLiveScreen - Complex WebRTC/MSE in WebView (not recommended)
+import { CameraLiveScreen } from './src/screens/CameraLiveScreen'; // Complex WebView version
+import { CameraLiveScreenSimple } from './src/screens/CameraLiveScreen_SIMPLE'; // Frigate PWA in WebView
+import { CameraLiveScreenMJPEG } from './src/screens/CameraLiveScreen_MJPEG'; // MJPEG in WebView
+import { CameraLiveScreenNative } from './src/screens/CameraLiveScreen_NATIVE'; // NATIVE VIDEO PLAYER
+import { CameraLiveScreenWebRTC } from './src/screens/CameraLiveScreen_WEBRTC'; // WEBRTC via go2rtc
+
+// Choose which implementation to use:
+const CameraLiveComponent = CameraLiveScreenWebRTC; // WebRTC - Ultra-low latency via go2rtc!
 import { EventDetailsScreen } from './src/screens/EventDetailsScreen';
 import { darkTheme, lightTheme } from './src/theme/theme';
 
 // Initialize Sentry for error tracking (optional - only if DSN is configured)
-// IMPORTANT: Must be done before creating any instrumentation
-let routingInstrumentation: Sentry.ReactNavigationInstrumentation | undefined;
 let sentryInitialized = false;
 
 if (process.env.EXPO_PUBLIC_SENTRY_DSN) {
   try {
-    // Check if Sentry native module is available by checking if nativeCrash exists
-    // Use typeof check to avoid "Cannot read property 'prototype' of undefined" error
-    if (typeof Sentry.nativeCrash !== 'undefined' && Sentry.nativeCrash) {
-      // Create routing instrumentation AFTER checking DSN exists
-      routingInstrumentation = new Sentry.ReactNavigationInstrumentation();
-      
-      Sentry.init({
-        dsn: process.env.EXPO_PUBLIC_SENTRY_DSN,
-        enableInExpoDevelopment: false,
-        debug: __DEV__,
-        // Enable performance monitoring
-        tracesSampleRate: 1.0,
-        // Connect routing instrumentation
-        integrations: [
-          new Sentry.ReactNativeTracing({
-            routingInstrumentation,
-            tracingOrigins: ['localhost', /^\//],
-          }),
-        ],
-        // Enable crash reporting
-        enableAutoSessionTracking: true,
-        // Session tracking interval
-        sessionTrackingIntervalMillis: 30000,
-        // Add release version
-        release: 'aviant@1.0.0',
-        dist: '1',
-        // Add environment
-        environment: __DEV__ ? 'development' : 'production',
-      });
-      sentryInitialized = true;
-      console.log('Sentry initialized successfully');
-    } else {
-      console.warn('Sentry native module not available in Expo Go - build native app to enable');
-    }
+    Sentry.init({
+      dsn: process.env.EXPO_PUBLIC_SENTRY_DSN,
+      debug: __DEV__,
+      tracesSampleRate: 1.0,
+      enableAutoSessionTracking: true,
+      sessionTrackingIntervalMillis: 30000,
+      release: 'aviant@1.0.0',
+      dist: '1',
+      environment: __DEV__ ? 'development' : 'production',
+    });
+    sentryInitialized = true;
+    console.log('Sentry initialized successfully');
   } catch (error) {
     console.warn('Sentry initialization skipped:', error instanceof Error ? error.message : String(error));
   }
@@ -155,14 +141,11 @@ function AppNavigator({ themePreference, onThemeChange }: AppNavigatorProps) {
     <NavigationContainer
       ref={navigationRef}
       onReady={() => {
-        // Register navigation container with Sentry (only if Sentry is initialized)
-        if (routingInstrumentation) {
-          routingInstrumentation.registerNavigationContainer(navigationRef);
-        }
+        // Sentry navigation integration ready
       }}
       onStateChange={() => {
         // Track screen views (only if Sentry is initialized)
-        if (sentryInitialized && routingInstrumentation) {
+        if (sentryInitialized) {
           const currentRoute = navigationRef.current?.getCurrentRoute();
           if (currentRoute) {
             Sentry.addBreadcrumb({
@@ -183,7 +166,7 @@ function AppNavigator({ themePreference, onThemeChange }: AppNavigatorProps) {
           <Stack.Screen name="Main">
             {() => <MainTabs themePreference={themePreference} onThemeChange={onThemeChange} />}
           </Stack.Screen>
-          <Stack.Screen name="CameraLive" component={CameraLiveScreenWebRTC} />
+          <Stack.Screen name="CameraLive" component={CameraLiveComponent} />
           <Stack.Screen name="EventDetails" component={EventDetailsScreen} />
         </Stack.Navigator>
       ) : (

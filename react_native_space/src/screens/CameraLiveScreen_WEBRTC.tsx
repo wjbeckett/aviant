@@ -33,14 +33,16 @@ import {
   Badge,
 } from 'react-native-paper';
 import { RTCView, MediaStream } from 'react-native-webrtc';
-import Video from 'react-native-video';
+import Video, { VideoRef } from 'react-native-video';
 import { WebRTCConnection } from '../services/webrtcService';
 import { frigateRecordingsApi } from '../services/frigateRecordingsApi';
-import frigateApi from '../services/frigateApi';
+import { frigateApi } from '../services/frigateApi';
 import { format } from 'date-fns';
 import * as Sentry from '@sentry/react-native';
+import { VerticalTimeline } from '../components/VerticalTimeline';
 
 type PlaybackMode = 'live' | 'timeline';
+type StreamType = 'webrtc' | 'hls';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const SCREEN_HEIGHT = Dimensions.get('window').height;
@@ -61,11 +63,13 @@ export const CameraLiveScreenWebRTC = ({ route, navigation }: any) => {
   const styles = createStyles(theme);
   const { cameraName } = route.params;
   
-  // WebRTC state
+  // Stream state
+  const [streamType, setStreamType] = useState<StreamType>('webrtc');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [connectionState, setConnectionState] = useState<string>('new');
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
+  const [hlsUrl, setHlsUrl] = useState<string | null>(null);
   const webrtcConnection = useRef<WebRTCConnection | null>(null);
   
   // Playback state
@@ -74,7 +78,7 @@ export const CameraLiveScreenWebRTC = ({ route, navigation }: any) => {
   const [recordingUrl, setRecordingUrl] = useState<string | null>(null);
   const [recordingReady, setRecordingReady] = useState(false);
   const [buffering, setBuffering] = useState(false);
-  const videoRef = useRef<Video>(null);
+  const videoRef = useRef<VideoRef>(null);
   
   // Timeline state
   const [events, setEvents] = useState<TimelineEvent[]>([]);
@@ -95,10 +99,28 @@ export const CameraLiveScreenWebRTC = ({ route, navigation }: any) => {
     };
   }, [cameraName]);
 
+  // Fallback to HLS stream
+  const fallbackToHLS = useCallback(() => {
+    console.log('[CameraLive] Falling back to HLS stream');
+    webrtcConnection.current?.disconnect();
+    setStreamType('hls');
+    setRemoteStream(null);
+    
+    // Build HLS URL
+    const baseUrl = frigateApi.getBaseUrl();
+    const token = frigateApi.getJWTToken();
+    const url = `${baseUrl}/api/go2rtc/api/stream.m3u8?src=${encodeURIComponent(cameraName)}&token=${token}`;
+    console.log('[CameraLive] HLS URL:', url);
+    setHlsUrl(url);
+    setLoading(false);
+    setConnectionState('hls');
+  }, [cameraName]);
+
   const initializeWebRTC = async () => {
     try {
       setLoading(true);
       setError(null);
+      setStreamType('webrtc');
 
       const connection = new WebRTCConnection({
         cameraName,
@@ -114,6 +136,11 @@ export const CameraLiveScreenWebRTC = ({ route, navigation }: any) => {
           if (state === 'connected') {
             setLoading(false);
           }
+        },
+        onCodecError: (err) => {
+          // H265/HEVC codec not supported - fallback to HLS
+          console.log('[CameraLive] Codec error, falling back to HLS:', err.message);
+          fallbackToHLS();
         },
         onError: (err) => {
           console.error('[CameraLive WebRTC] Error:', err);
@@ -149,8 +176,8 @@ export const CameraLiveScreenWebRTC = ({ route, navigation }: any) => {
       
       const eventData = await frigateRecordingsApi.getEventsInRange(
         cameraName,
-        Math.floor(oneHourAgo / 1000),
-        Math.floor(now / 1000)
+        oneHourAgo,  // Pass milliseconds, API converts to seconds
+        now
       );
       
       setEvents(eventData);
@@ -294,7 +321,7 @@ export const CameraLiveScreenWebRTC = ({ route, navigation }: any) => {
               styles.statusDot,
               {
                 backgroundColor:
-                  playbackMode === 'live' && connectionState === 'connected'
+                  playbackMode === 'live' && (connectionState === 'connected' || connectionState === 'hls')
                     ? '#4CAF50'
                     : playbackMode === 'timeline'
                     ? '#2196F3'
@@ -308,6 +335,8 @@ export const CameraLiveScreenWebRTC = ({ route, navigation }: any) => {
             {playbackMode === 'live'
               ? connectionState === 'connected'
                 ? 'LIVE'
+                : connectionState === 'hls'
+                ? 'LIVE (HLS)'
                 : connectionState.toUpperCase()
               : buffering
               ? 'BUFFERING...'
@@ -349,13 +378,39 @@ export const CameraLiveScreenWebRTC = ({ route, navigation }: any) => {
           </View>
         )}
 
-        {/* Live WebRTC Stream (always rendered when in live mode OR while recording buffers) */}
-        {remoteStream && showLiveStream && (
+        {/* Live WebRTC Stream */}
+        {streamType === 'webrtc' && remoteStream && showLiveStream && (
           <RTCView
             streamURL={remoteStream.toURL()}
             style={[styles.videoPlayer, { zIndex: showLiveStream ? 2 : 1 }]}
             objectFit="cover"
             mirror={false}
+          />
+        )}
+        
+        {/* Live HLS Stream (fallback for H265 cameras) */}
+        {streamType === 'hls' && hlsUrl && showLiveStream && (
+          <Video
+            source={{ 
+              uri: hlsUrl,
+              headers: { Authorization: `Bearer ${frigateApi.getJWTToken()}` }
+            }}
+            style={[styles.videoPlayer, { zIndex: showLiveStream ? 2 : 1 }]}
+            resizeMode="cover"
+            controls={false}
+            paused={false}
+            repeat={true}
+            onReadyForDisplay={() => {
+              console.log('[HLS] Ready for display');
+              setLoading(false);
+            }}
+            onBuffer={({ isBuffering }) => {
+              console.log('[HLS] Buffering:', isBuffering);
+            }}
+            onError={(error) => {
+              console.error('[HLS] Playback error:', error);
+              setError('HLS stream failed');
+            }}
           />
         )}
 
@@ -403,77 +458,24 @@ export const CameraLiveScreenWebRTC = ({ route, navigation }: any) => {
         )}
       </View>
 
-      {/* Timeline (Scrollable) */}
-      <ScrollView
-        ref={scrollViewRef}
-        style={styles.timelineContainer}
-        contentContainerStyle={styles.timelineContent}
-        onScroll={handleTimelineScroll}
-        scrollEventThrottle={100}
-        showsVerticalScrollIndicator={true}
-      >
-        {/* LIVE Indicator */}
-        <TouchableOpacity
-          style={[
-            styles.timelineItem,
-            styles.liveItem,
-            playbackMode === 'live' && styles.timelineItemActive,
-          ]}
-          onPress={handleGoLive}
-        >
-          <Text style={styles.liveLabel}>LIVE</Text>
-          <Badge style={styles.liveBadge} size={8} />
-        </TouchableOpacity>
-
-        <View style={styles.timelineDivider} />
-
-        {/* Time Markers with Events */}
-        {timeMarkers.map((marker, index) => {
-          // Find events at this time
-          const eventsAtTime = events.filter(
-            (e) =>
-              e.start_time * 1000 >= marker.time - 2.5 * 60 * 1000 &&
-              e.start_time * 1000 <= marker.time + 2.5 * 60 * 1000
-          );
-
-          return (
-            <View key={index}>
-              <TouchableOpacity
-                style={[
-                  styles.timelineItem,
-                  selectedTime === marker.time && styles.timelineItemActive,
-                ]}
-                onPress={() => handleTimeSelect(marker.time)}
-              >
-                <Text style={styles.timelineTime}>{marker.label}</Text>
-                
-                {/* Event indicators */}
-                {eventsAtTime.length > 0 && (
-                  <View style={styles.eventIndicators}>
-                    {eventsAtTime.slice(0, 3).map((event) => (
-                      <Text key={event.id} style={styles.eventEmoji}>
-                        {getEventEmoji(event.label)}
-                      </Text>
-                    ))}
-                    {eventsAtTime.length > 3 && (
-                      <Text style={styles.eventCount}>+{eventsAtTime.length - 3}</Text>
-                    )}
-                  </View>
-                )}
-              </TouchableOpacity>
-              
-              {index < timeMarkers.length - 1 && (
-                <View style={styles.timelineDivider} />
-              )}
-            </View>
-          );
-        })}
-      </ScrollView>
+      {/* Vertical Timeline Component */}
+      <VerticalTimeline
+        onTimeSelect={handleTimeSelect}
+        events={events}
+        currentTime={selectedTime}
+        timeRangeHours={1}
+      />
 
       {/* Info Banner */}
-      {playbackMode === 'live' && remoteStream && (
+      {playbackMode === 'live' && streamType === 'webrtc' && remoteStream && (
         <Surface style={styles.infoBanner}>
-          <Text style={styles.infoText}>⚡ WebRTC • Ultra Low Latency • Full Audio</Text>
+          <Text style={styles.infoText}>⚡ WebRTC • Ultra Low Latency</Text>
+        </Surface>
+      )}
+
+      {playbackMode === 'live' && streamType === 'hls' && hlsUrl && (
+        <Surface style={styles.infoBanner}>
+          <Text style={styles.infoText}>📺 HLS • H265 Native Decode</Text>
         </Surface>
       )}
 

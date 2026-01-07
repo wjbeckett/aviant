@@ -7,11 +7,13 @@ import {
   ScrollView,
   Alert,
 } from 'react-native';
-import { TextInput, Button, Text, Divider, HelperText } from 'react-native-paper';
+import { TextInput, Button, Text, Divider, HelperText , useTheme } from 'react-native-paper';
 import * as Sentry from '@sentry/react-native';
 import { useAuth } from '../context/AuthContext';
 
 export const AuthScreen = () => {
+  const theme = useTheme();
+  const styles = createStyles(theme);
   const { login } = useAuth();
   const [localUrl, setLocalUrl] = useState('');
   const [remoteUrl, setRemoteUrl] = useState('');
@@ -47,14 +49,7 @@ export const AuthScreen = () => {
       console.error('[AuthScreen] Login failed:', error.message);
       
       // Report to Sentry
-      Sentry.captureException(error, {
-        tags: { screen: 'auth' },
-        extra: {
-          localUrl: local ? 'configured' : 'not configured',
-          remoteUrl: remote ? 'configured' : 'not configured',
-          errorMessage: error.message,
-        }
-      });
+      Sentry.captureException(error);
       
       Alert.alert(
         'Login Failed',
@@ -172,10 +167,10 @@ export const AuthScreen = () => {
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (theme: any) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#121212',
+    backgroundColor: theme.colors.background,
   },
   scrollContent: {
     flexGrow: 1,
@@ -187,34 +182,34 @@ const styles = StyleSheet.create({
     marginBottom: 48,
   },
   title: {
-    color: '#2196F3',
+    color: theme.colors.primary,
     fontWeight: 'bold',
     marginBottom: 8,
   },
   subtitle: {
-    color: '#9E9E9E',
+    color: theme.colors.onSurfaceVariant,
   },
   form: {
     width: '100%',
   },
   sectionTitle: {
-    color: '#FFFFFF',
+    color: theme.colors.onSurface,
     marginBottom: 8,
     marginTop: 8,
   },
   divider: {
     marginVertical: 16,
-    backgroundColor: '#424242',
+    backgroundColor: theme.colors.outline,
   },
   input: {
     marginBottom: 8,
   },
   optionalLabel: {
-    color: '#FFFFFF',
+    color: theme.colors.onSurface,
     marginBottom: 8,
   },
   helpText: {
-    color: '#9E9E9E',
+    color: theme.colors.onSurfaceVariant,
     marginBottom: 16,
   },
   button: {

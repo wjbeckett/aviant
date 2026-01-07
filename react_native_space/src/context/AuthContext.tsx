@@ -5,7 +5,7 @@ import { frigateApi } from '../services/frigateApi';
 interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
-  login: (username: string, password: string, frigateUrl: string) => Promise<void>;
+  login: (username: string, password: string, localUrl?: string, remoteUrl?: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -31,27 +31,41 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     restoreSession();
   }, []);
 
-  const login = async (username: string, password: string, frigateUrl: string) => {
+  const login = async (username: string, password: string, localUrl?: string, remoteUrl?: string) => {
     setIsLoading(true);
     try {
-      await frigateApi.login(username, password, frigateUrl);
+      // Use local URL if available, otherwise remote URL
+      const frigateUrl = localUrl || remoteUrl || '';
+      await frigateApi.login(username, password, frigateUrl, localUrl, remoteUrl);
       setIsAuthenticated(true);
       
-      // Set Sentry user context
-      Sentry.setUser({ username });
-      Sentry.addBreadcrumb({
-        category: 'auth',
-        message: 'User logged in',
-        level: 'info',
-        data: { username, frigateUrl },
-      });
+      // Set Sentry user context (if available)
+      try {
+        if (Sentry.setUser) {
+          Sentry.setUser({ username });
+          Sentry.addBreadcrumb({
+            category: 'auth',
+            message: 'User logged in',
+            level: 'info',
+            data: { username, localUrl, remoteUrl },
+          });
+        }
+      } catch (e) {
+        // Sentry not available, continue without it
+      }
     } catch (error: any) {
-      Sentry.addBreadcrumb({
-        category: 'auth',
-        message: 'Login failed',
-        level: 'error',
-        data: { username, error: error.message },
-      });
+      try {
+        if (Sentry.addBreadcrumb) {
+          Sentry.addBreadcrumb({
+            category: 'auth',
+            message: 'Login failed',
+            level: 'error',
+            data: { username, error: error.message },
+          });
+        }
+      } catch (e) {
+        // Sentry not available, continue without it
+      }
       throw error;
     } finally {
       setIsLoading(false);
@@ -62,13 +76,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await frigateApi.clearSession();
     setIsAuthenticated(false);
     
-    // Clear Sentry user context
-    Sentry.setUser(null);
-    Sentry.addBreadcrumb({
-      category: 'auth',
-      message: 'User logged out',
-      level: 'info',
-    });
+    // Clear Sentry user context (if available)
+    try {
+      if (Sentry.setUser) {
+        Sentry.setUser(null);
+        Sentry.addBreadcrumb({
+          category: 'auth',
+          message: 'User logged out',
+          level: 'info',
+        });
+      }
+    } catch (e) {
+      // Sentry not available, continue without it
+    }
   };
 
   return (

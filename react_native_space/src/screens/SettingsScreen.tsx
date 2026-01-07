@@ -1,260 +1,460 @@
 import React, { useState, useEffect } from 'react';
 import {
   View,
+  Text,
   StyleSheet,
   ScrollView,
+  TouchableOpacity,
   Alert,
+  Modal,
 } from 'react-native';
-import {
-  TextInput,
-  Button,
-  Text,
-  IconButton,
-  Switch,
-  Divider,
-  HelperText,
-  Card,
-} from 'react-native-paper';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import { useAuth } from '../context/AuthContext';
+import { useTheme } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
-import * as SecureStore from 'expo-secure-store';
 import * as Sentry from '@sentry/react-native';
+import type { ThemePreference } from '../../App';
+import type { RouteProp } from '@react-navigation/native';
 
-const REMOTE_URL_KEY = 'frigate_remote_url';
-const URL_SWITCHING_ENABLED_KEY = 'url_switching_enabled';
+type SettingsScreenRouteProp = RouteProp<{
+  Settings: {
+    themePreference: ThemePreference;
+    onThemeChange: (theme: ThemePreference) => Promise<void>;
+  };
+}>;
 
-export const SettingsScreen = () => {
+interface Props {
+  route: SettingsScreenRouteProp;
+}
+
+function SettingsScreen({ route }: Props) {
+  const { logout, isAuthenticated } = useAuth();
+  const theme = useTheme();
   const navigation = useNavigation();
-  const [remoteUrl, setRemoteUrl] = useState('');
-  const [urlSwitchingEnabled, setUrlSwitchingEnabled] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const styles = createStyles(theme);
+  
+  const [showThemeModal, setShowThemeModal] = useState(false);
+  const [currentTheme, setCurrentTheme] = useState<ThemePreference>(
+    route.params?.themePreference || 'light'
+  );
 
+  // Update local state when route params change
   useEffect(() => {
-    loadSettings();
-  }, []);
-
-  const loadSettings = async () => {
-    try {
-      const savedRemoteUrl = await SecureStore.getItemAsync(REMOTE_URL_KEY);
-      const savedSwitching = await SecureStore.getItemAsync(URL_SWITCHING_ENABLED_KEY);
-      
-      if (savedRemoteUrl) setRemoteUrl(savedRemoteUrl);
-      if (savedSwitching) setUrlSwitchingEnabled(savedSwitching === 'true');
-    } catch (error) {
-      console.error('[Settings] Failed to load settings:', error);
+    if (route.params?.themePreference) {
+      setCurrentTheme(route.params.themePreference);
     }
+  }, [route.params?.themePreference]);
+
+  const handleLogout = () => {
+    Alert.alert(
+      'Logout',
+      'Are you sure you want to logout?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Logout',
+          onPress: logout,
+          style: 'destructive',
+        },
+      ]
+    );
   };
 
-  const saveSettings = async () => {
-    setLoading(true);
+  const handleClearURL = () => {
+    Alert.alert(
+      'Clear Frigate URL',
+      'This will remove the stored Frigate server URL and you will need to set it up again.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Clear',
+          onPress: () => logout(),
+          style: 'destructive',
+        },
+      ]
+    );
+  };
+
+  const handleTestSentry = () => {
     try {
-      // Save remote URL if provided
-      if (remoteUrl.trim()) {
-        let finalUrl = remoteUrl.trim();
-        if (!finalUrl.startsWith('http://') && !finalUrl.startsWith('https://')) {
-          finalUrl = `https://${finalUrl}`;
-        }
-        finalUrl = finalUrl.replace(/\/$/, '');
-        await SecureStore.setItemAsync(REMOTE_URL_KEY, finalUrl);
-      } else {
-        await SecureStore.deleteItemAsync(REMOTE_URL_KEY);
+      // Check if Sentry native module is available
+      if (typeof Sentry.nativeCrash === 'undefined' || !Sentry.captureException) {
+        Alert.alert(
+          'Sentry Not Available',
+          'Sentry error tracking requires a native build (APK/IPA).\n\n' +
+          'It cannot run in Expo Go or web preview.\n\n' +
+          'To test Sentry:\n' +
+          '1. Build the app with npx expo run:android\n' +
+          '2. Install the APK on your device\n' +
+          '3. Test the Sentry integration',
+          [{ text: 'OK' }]
+        );
+        return;
       }
-
-      // Save URL switching preference
-      await SecureStore.setItemAsync(
-        URL_SWITCHING_ENABLED_KEY,
-        urlSwitchingEnabled.toString()
-      );
-
+      
+      // Send a test error
+      Sentry.captureException(new Error('Test error from Settings screen'));
+      
+      // Send a test message
+      Sentry.captureMessage('Test message from Aviant app', 'info');
+      
+      // Add a breadcrumb
       Sentry.addBreadcrumb({
-        category: 'settings',
-        message: 'Settings saved',
+        message: 'User tested Sentry integration',
         level: 'info',
         data: {
-          remoteUrlConfigured: !!remoteUrl.trim(),
-          urlSwitchingEnabled,
+          screen: 'Settings',
+          timestamp: new Date().toISOString(),
         },
       });
 
-      Alert.alert('Success', 'Settings saved successfully');
-      navigation.goBack();
-    } catch (error: any) {
-      console.error('[Settings] Failed to save settings:', error);
-      Alert.alert('Error', 'Failed to save settings. Please try again.');
-    } finally {
-      setLoading(false);
+      Alert.alert(
+        'Sentry Test Sent',
+        'Test error, message, and breadcrumb have been sent to Sentry. Check your Sentry dashboard.',
+        [{ text: 'OK' }]
+      );
+    } catch (error) {
+      Alert.alert(
+        'Sentry Test Failed',
+        'Failed to send test data to Sentry. Error: ' + (error as Error).message,
+        [{ text: 'OK' }]
+      );
     }
   };
 
-  return (
-    <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <IconButton
-          icon="arrow-left"
+  const handleThemeSelect = async (selectedTheme: ThemePreference) => {
+    setShowThemeModal(false);
+    setCurrentTheme(selectedTheme);
+    if (route.params?.onThemeChange) {
+      await route.params.onThemeChange(selectedTheme);
+    }
+  };
+
+  const getThemeLabel = (preference: ThemePreference): string => {
+    switch (preference) {
+      case 'light':
+        return 'Light';
+      case 'dark':
+        return 'Dark';
+      case 'system':
+        return 'System';
+      default:
+        return 'Light';
+    }
+  };
+
+  const renderSettingItem = (
+    icon: any,
+    title: string,
+    subtitle?: string,
+    onPress?: () => void,
+    destructive?: boolean
+  ) => (
+    <TouchableOpacity
+      style={styles.settingItem}
+      onPress={onPress}
+      disabled={!onPress}
+    >
+      <View style={styles.settingLeft}>
+        <Ionicons
+          name={icon}
           size={24}
-          iconColor="#FFFFFF"
-          onPress={() => navigation.goBack()}
+          color={destructive ? theme.colors.error : theme.colors.primary}
+          style={styles.settingIcon}
         />
-        <Text variant="headlineMedium" style={styles.headerTitle}>
-          Settings
-        </Text>
-        <View style={{ width: 48 }} />
+        <View style={styles.settingTextContainer}>
+          <Text style={[styles.settingTitle, destructive && styles.destructiveText]}>
+            {title}
+          </Text>
+          {subtitle && <Text style={styles.settingSubtitle}>{subtitle}</Text>}
+        </View>
+      </View>
+      {onPress && (
+        <Ionicons name="chevron-forward" size={20} color={theme.colors.secondary} />
+      )}
+    </TouchableOpacity>
+  );
+
+  return (
+    <SafeAreaView style={styles.container}>
+      {/* Header with Back Button */}
+      <View style={styles.header}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => navigation.canGoBack() ? navigation.goBack() : null}
+        >
+          <Ionicons name="arrow-back" size={24} color={theme.colors.onSurface} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Settings</Text>
+        <View style={styles.headerSpacer} />
       </View>
 
-      <ScrollView style={styles.content}>
-        {/* Remote Access Section */}
-        <Card style={styles.card}>
-          <Card.Content>
-            <Text variant="titleMedium" style={styles.sectionTitle}>
-              Remote Access
-            </Text>
-            <HelperText type="info" visible>
-              Configure a secondary URL for accessing Frigate when away from your local network
-            </HelperText>
+      <ScrollView style={styles.scrollView}>
+        {/* Appearance Section */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>APPEARANCE</Text>
+          {renderSettingItem(
+            'color-palette-outline',
+            'Theme',
+            getThemeLabel(currentTheme),
+            () => setShowThemeModal(true)
+          )}
+        </View>
 
-            <TextInput
-              label="Remote URL (Optional)"
-              value={remoteUrl}
-              onChangeText={setRemoteUrl}
-              mode="outlined"
-              placeholder="frigate.example.com:8971"
-              autoCapitalize="none"
-              autoCorrect={false}
-              keyboardType="url"
-              left={<TextInput.Icon icon="cloud" />}
-              style={styles.input}
-              theme={{
-                roundness: 12,
-              }}
-            />
-            <HelperText type="info" visible>
-              Use HTTPS and port 8971 for secure remote access
-            </HelperText>
-          </Card.Content>
-        </Card>
+        {/* Server Section */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>SERVER</Text>
+          {renderSettingItem(
+            'server-outline',
+            'Frigate Server',
+            'Configured'
+          )}
+          {renderSettingItem(
+            'trash-outline',
+            'Clear Server URL',
+            'Remove stored Frigate URL',
+            handleClearURL,
+            true
+          )}
+        </View>
 
-        {/* URL Switching Section */}
-        <Card style={styles.card}>
-          <Card.Content>
-            <View style={styles.switchRow}>
-              <View style={styles.switchTextContainer}>
-                <Text variant="titleMedium" style={styles.switchTitle}>
-                  Automatic URL Switching
-                </Text>
-                <Text variant="bodySmall" style={styles.switchDescription}>
-                  Automatically switch between local and remote URLs based on network availability
-                </Text>
-              </View>
-              <Switch
-                value={urlSwitchingEnabled}
-                onValueChange={setUrlSwitchingEnabled}
-                color="#2196F3"
-              />
-            </View>
-          </Card.Content>
-        </Card>
+        {/* Account Section - Only show when authenticated */}
+        {isAuthenticated && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>ACCOUNT</Text>
+            {renderSettingItem(
+              'log-out-outline',
+              'Logout',
+              'Sign out of your account',
+              handleLogout,
+              true
+            )}
+          </View>
+        )}
 
-        <Divider style={styles.divider} />
+        {/* Diagnostics Section */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>DIAGNOSTICS</Text>
+          {renderSettingItem(
+            'bug-outline',
+            'Test Error Tracking',
+            'Send test event to Sentry',
+            handleTestSentry
+          )}
+        </View>
 
-        {/* About Section */}
-        <Card style={styles.card}>
-          <Card.Content>
-            <Text variant="titleMedium" style={styles.sectionTitle}>
-              About
-            </Text>
-            <Text variant="bodyMedium" style={styles.aboutText}>
-              Aviant v1.0.0
-            </Text>
-            <Text variant="bodySmall" style={styles.aboutDescription}>
-              A mobile client for Frigate NVR. Not officially associated with Frigate.
-            </Text>
-          </Card.Content>
-        </Card>
-
-        {/* Save Button */}
-        <Button
-          mode="contained"
-          onPress={saveSettings}
-          loading={loading}
-          disabled={loading}
-          style={styles.saveButton}
-          contentStyle={styles.buttonContent}
-          icon="content-save"
-        >
-          Save Settings
-        </Button>
+        {/* App Info */}
+        <View style={styles.footer}>
+          <Text style={styles.footerText}>Aviant v1.0.0</Text>
+          <Text style={styles.footerText}>Frigate NVR Mobile Client</Text>
+        </View>
       </ScrollView>
-    </View>
-  );
-};
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#121212',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 8,
-    paddingTop: 48,
-    paddingBottom: 16,
-    backgroundColor: '#1E1E1E',
-  },
-  headerTitle: {
-    color: '#FFFFFF',
-    fontWeight: 'bold',
-  },
-  content: {
-    flex: 1,
-    padding: 16,
-  },
-  card: {
-    marginBottom: 16,
-    backgroundColor: '#1E1E1E',
-  },
-  sectionTitle: {
-    color: '#FFFFFF',
-    marginBottom: 8,
-  },
-  input: {
-    marginTop: 8,
-    marginBottom: 4,
-  },
-  switchRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  switchTextContainer: {
-    flex: 1,
-    marginRight: 16,
-  },
-  switchTitle: {
-    color: '#FFFFFF',
-    marginBottom: 4,
-  },
-  switchDescription: {
-    color: '#9E9E9E',
-  },
-  divider: {
-    marginVertical: 8,
-    backgroundColor: '#424242',
-  },
-  aboutText: {
-    color: '#FFFFFF',
-    marginBottom: 4,
-  },
-  aboutDescription: {
-    color: '#9E9E9E',
-  },
-  saveButton: {
-    marginTop: 16,
-    marginBottom: 32,
-    borderRadius: 12,
-  },
-  buttonContent: {
-    paddingVertical: 8,
-  },
-});
+      {/* Theme Selection Modal */}
+      <Modal
+        visible={showThemeModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowThemeModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowThemeModal(false)}
+        >
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Select Theme</Text>
+            
+            <TouchableOpacity
+              style={styles.themeOption}
+              onPress={() => handleThemeSelect('light')}
+            >
+              <View style={styles.themeOptionLeft}>
+                <Ionicons name="sunny-outline" size={24} color={theme.colors.onSurface} />
+                <Text style={styles.themeOptionText}>Light</Text>
+              </View>
+              {currentTheme === 'light' && (
+                <Ionicons name="checkmark" size={24} color={theme.colors.primary} />
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.themeOption}
+              onPress={() => handleThemeSelect('dark')}
+            >
+              <View style={styles.themeOptionLeft}>
+                <Ionicons name="moon-outline" size={24} color={theme.colors.onSurface} />
+                <Text style={styles.themeOptionText}>Dark</Text>
+              </View>
+              {currentTheme === 'dark' && (
+                <Ionicons name="checkmark" size={24} color={theme.colors.primary} />
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.themeOption}
+              onPress={() => handleThemeSelect('system')}
+            >
+              <View style={styles.themeOptionLeft}>
+                <Ionicons name="phone-portrait-outline" size={24} color={theme.colors.onSurface} />
+                <Text style={styles.themeOptionText}>System</Text>
+              </View>
+              {currentTheme === 'system' && (
+                <Ionicons name="checkmark" size={24} color={theme.colors.primary} />
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.cancelButton}
+              onPress={() => setShowThemeModal(false)}
+            >
+              <Text style={styles.cancelButtonText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+    </SafeAreaView>
+  );
+}
+
+const createStyles = (theme: any) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.colors.background,
+    },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 16,
+      paddingVertical: 16,
+      backgroundColor: theme.colors.surface,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.dark ? '#2A2A2A' : '#E0E0E0',
+    },
+    backButton: {
+      padding: 4,
+    },
+    headerTitle: {
+      fontSize: 20,
+      fontWeight: '600',
+      color: theme.colors.onSurface,
+      flex: 1,
+      textAlign: 'center',
+    },
+    headerSpacer: {
+      width: 32,
+    },
+    scrollView: {
+      flex: 1,
+    },
+    section: {
+      marginTop: 20,
+    },
+    sectionTitle: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: theme.colors.secondary,
+      paddingHorizontal: 20,
+      paddingBottom: 8,
+      letterSpacing: 0.5,
+    },
+    settingItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      backgroundColor: theme.colors.surface,
+      paddingVertical: 16,
+      paddingHorizontal: 20,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.dark ? '#2A2A2A' : '#E0E0E0',
+    },
+    settingLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      flex: 1,
+    },
+    settingIcon: {
+      marginRight: 16,
+    },
+    settingTextContainer: {
+      flex: 1,
+    },
+    settingTitle: {
+      fontSize: 16,
+      color: theme.colors.onSurface,
+      fontWeight: '500',
+    },
+    settingSubtitle: {
+      fontSize: 14,
+      color: theme.colors.secondary,
+      marginTop: 2,
+    },
+    destructiveText: {
+      color: theme.colors.error,
+    },
+    footer: {
+      alignItems: 'center',
+      paddingVertical: 32,
+    },
+    footerText: {
+      fontSize: 12,
+      color: theme.colors.secondary,
+      marginVertical: 2,
+    },
+    modalOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      justifyContent: 'center',
+      alignItems: 'center',
+      padding: 20,
+    },
+    modalContent: {
+      backgroundColor: theme.colors.surface,
+      borderRadius: 16,
+      padding: 20,
+      width: '100%',
+      maxWidth: 400,
+    },
+    modalTitle: {
+      fontSize: 20,
+      fontWeight: '600',
+      color: theme.colors.onSurface,
+      marginBottom: 20,
+      textAlign: 'center',
+    },
+    themeOption: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingVertical: 16,
+      paddingHorizontal: 12,
+      borderRadius: 12,
+      marginBottom: 8,
+      backgroundColor: theme.dark ? '#2A2A2A' : '#F5F5F5',
+    },
+    themeOptionLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    themeOptionText: {
+      fontSize: 16,
+      color: theme.colors.onSurface,
+      marginLeft: 12,
+      fontWeight: '500',
+    },
+    cancelButton: {
+      marginTop: 12,
+      paddingVertical: 14,
+      alignItems: 'center',
+    },
+    cancelButtonText: {
+      fontSize: 16,
+      color: theme.colors.primary,
+      fontWeight: '600',
+    },
+  });
+
+export default SettingsScreen;
