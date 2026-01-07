@@ -37,33 +37,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await frigateApi.login(username, password, frigateUrl);
       setIsAuthenticated(true);
       
-      // Set Sentry user context (if available)
-      try {
-        if (Sentry.setUser) {
-          Sentry.setUser({ username });
-          Sentry.addBreadcrumb({
-            category: 'auth',
-            message: 'User logged in',
-            level: 'info',
-            data: { username, frigateUrl },
-          });
-        }
-      } catch (e) {
-        // Sentry not available, continue without it
-      }
+      // Set Sentry user context
+      Sentry.setUser({ username });
+      Sentry.addBreadcrumb({
+        category: 'auth',
+        message: 'User logged in',
+        level: 'info',
+        data: { username, frigateUrl },
+      });
     } catch (error: any) {
-      try {
-        if (Sentry.addBreadcrumb) {
-          Sentry.addBreadcrumb({
-            category: 'auth',
-            message: 'Login failed',
-            level: 'error',
-            data: { username, error: error.message },
-          });
-        }
-      } catch (e) {
-        // Sentry not available, continue without it
-      }
+      Sentry.addBreadcrumb({
+        category: 'auth',
+        message: 'Login failed',
+        level: 'error',
+        data: { username, error: error.message },
+      });
       throw error;
     } finally {
       setIsLoading(false);
@@ -74,19 +62,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await frigateApi.clearSession();
     setIsAuthenticated(false);
     
-    // Clear Sentry user context (if available)
-    try {
-      if (Sentry.setUser) {
-        Sentry.setUser(null);
-        Sentry.addBreadcrumb({
-          category: 'auth',
-          message: 'User logged out',
-          level: 'info',
-        });
-      }
-    } catch (e) {
-      // Sentry not available, continue without it
-    }
+    // Clear Sentry user context
+    Sentry.setUser(null);
+    Sentry.addBreadcrumb({
+      category: 'auth',
+      message: 'User logged out',
+      level: 'info',
+    });
   };
 
   return (

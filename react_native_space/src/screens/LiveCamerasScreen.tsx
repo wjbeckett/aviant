@@ -8,13 +8,11 @@ import {
   Pressable,
   Alert,
 } from 'react-native';
-import { Text, ActivityIndicator, Button, Appbar , useTheme } from 'react-native-paper';
+import { Text, ActivityIndicator, Button, Appbar } from 'react-native-paper';
 import { frigateApi, Camera } from '../services/frigateApi';
 import { useAuth } from '../context/AuthContext';
 
 export const LiveCamerasScreen = ({ navigation }: any) => {
-  const theme = useTheme();
-  const styles = createStyles(theme);
   const { logout } = useAuth();
   const [cameras, setCameras] = useState<Camera[]>([]);
   const [loading, setLoading] = useState(true);
@@ -148,16 +146,16 @@ export const LiveCamerasScreen = ({ navigation }: any) => {
   );
 };
 
-const createStyles = (theme: any) => StyleSheet.create({
+const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.colors.background,
+    backgroundColor: '#121212',
   },
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: theme.colors.background,
+    backgroundColor: '#121212',
     padding: 24,
   },
   listContent: {
@@ -166,7 +164,7 @@ const createStyles = (theme: any) => StyleSheet.create({
   cameraCard: {
     flex: 1,
     margin: 8,
-    backgroundColor: theme.colors.surface,
+    backgroundColor: '#1E1E1E',
     borderRadius: 12,
     overflow: 'hidden',
     elevation: 4,
@@ -180,20 +178,20 @@ const createStyles = (theme: any) => StyleSheet.create({
     padding: 12,
   },
   cameraName: {
-    color: theme.colors.onSurface,
+    color: '#FFFFFF',
     textTransform: 'capitalize',
   },
   loadingText: {
     marginTop: 16,
-    color: theme.colors.onSurfaceVariant,
+    color: '#9E9E9E',
   },
   errorText: {
-    color: theme.colors.error,
+    color: '#F44336',
     textAlign: 'center',
     marginBottom: 16,
   },
   emptyText: {
-    color: theme.colors.onSurfaceVariant,
+    color: '#9E9E9E',
     marginBottom: 16,
   },
   retryButton: {

@@ -8,15 +8,13 @@ import {
   ScrollView,
   Alert,
 } from 'react-native';
-import { TextInput, Button, Text, IconButton, Chip , useTheme } from 'react-native-paper';
+import { TextInput, Button, Text, IconButton, Chip } from 'react-native-paper';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import * as Sentry from '@sentry/react-native';
 import { useAuth } from '../context/AuthContext';
 
 export const LoginScreen = () => {
-  const theme = useTheme();
   const navigation = useNavigation<any>();
-  const styles = createStyles(theme);
   const route = useRoute<any>();
   const { login } = useAuth();
   
@@ -74,7 +72,7 @@ export const LoginScreen = () => {
           <IconButton
             icon="arrow-left"
             size={24}
-            iconColor={theme.colors.onSurfaceVariant}
+            iconColor="#9E9E9E"
             onPress={() => navigation.goBack()}
           />
         </View>
@@ -161,10 +159,10 @@ export const LoginScreen = () => {
   );
 };
 
-const createStyles = (theme: any) => StyleSheet.create({
+const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.colors.background,
+    backgroundColor: '#121212',
   },
   scrollContent: {
     flexGrow: 1,
@@ -186,7 +184,7 @@ const createStyles = (theme: any) => StyleSheet.create({
     marginBottom: 16,
   },
   title: {
-    color: theme.colors.primary,
+    color: '#2196F3',
     fontWeight: 'bold',
   },
   connectionInfo: {
@@ -194,14 +192,14 @@ const createStyles = (theme: any) => StyleSheet.create({
     marginBottom: 32,
   },
   connectingToLabel: {
-    color: theme.colors.onSurfaceVariant,
+    color: '#9E9E9E',
     marginBottom: 8,
   },
   urlChip: {
-    backgroundColor: theme.colors.surface,
+    backgroundColor: '#1E1E1E',
   },
   urlChipText: {
-    color: theme.colors.primary,
+    color: '#2196F3',
   },
   form: {
     width: '100%',

@@ -1,7 +1,6 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, useColorScheme, Appearance } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import * as Sentry from '@sentry/react-native';
-import { darkTheme, lightTheme } from '../theme/theme';
 
 interface Props {
   children: React.ReactNode;
@@ -23,20 +22,14 @@ export class ErrorBoundary extends React.Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    // Log error to Sentry (if available)
-    try {
-      if (Sentry.captureException) {
-        Sentry.captureException(error, {
-          contexts: {
-            react: {
-              componentStack: errorInfo.componentStack,
-            },
-          },
-        });
-      }
-    } catch (e) {
-      // Sentry not available, continue without it
-    }
+    // Log error to Sentry
+    Sentry.captureException(error, {
+      contexts: {
+        react: {
+          componentStack: errorInfo.componentStack,
+        },
+      },
+    });
     console.error('Error caught by boundary:', error, errorInfo);
   }
 
@@ -46,11 +39,6 @@ export class ErrorBoundary extends React.Component<Props, State> {
 
   render() {
     if (this.state.hasError) {
-      // Get current color scheme
-      const colorScheme = Appearance.getColorScheme();
-      const theme = colorScheme === 'dark' ? darkTheme : lightTheme;
-      const styles = createStyles(theme);
-      
       return (
         <View style={styles.container}>
           <Text style={styles.title}>Oops! Something went wrong</Text>
@@ -68,34 +56,34 @@ export class ErrorBoundary extends React.Component<Props, State> {
   }
 }
 
-const createStyles = (theme: any) => StyleSheet.create({
+const styles = StyleSheet.create({
   container: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: theme.colors.background,
+    backgroundColor: '#121212',
     padding: 20,
   },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: theme.colors.onBackground,
+    color: '#fff',
     marginBottom: 16,
   },
   message: {
     fontSize: 16,
-    color: theme.colors.onSurfaceVariant,
+    color: '#ccc',
     textAlign: 'center',
     marginBottom: 32,
   },
   button: {
-    backgroundColor: theme.colors.primary,
+    backgroundColor: '#2196F3',
     paddingHorizontal: 32,
     paddingVertical: 12,
     borderRadius: 8,
   },
   buttonText: {
-    color: theme.colors.onPrimary,
+    color: '#fff',
     fontSize: 16,
     fontWeight: '600',
   },

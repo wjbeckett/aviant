@@ -5,12 +5,12 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "dark",
     "newArchEnabled": true,
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#000000"
+      "backgroundColor": "#121212"
     },
     "ios": {
       "supportsTablet": true,
@@ -20,7 +20,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#000000"
+        "backgroundColor": "#121212"
       },
       "package": "com.aviant.app",
       "versionCode": 1,
@@ -36,18 +36,9 @@
       [
         "@sentry/react-native",
         {
-          "organization": "wb-n2",
+          "organization": "your-org-slug",
           "project": "aviant",
-          "uploadSourceMaps": true
-        }
-      ],
-      [
-        "expo-build-properties",
-        {
-          "android": {
-            "usesCleartextTraffic": true,
-            "networkSecurityConfig": "./android/app/src/main/res/xml/network_security_config.xml"
-          }
+          "uploadSourceMaps": false
         }
       ],
       "react-native-video"

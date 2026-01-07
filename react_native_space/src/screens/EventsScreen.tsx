@@ -7,12 +7,10 @@ import {
   Image,
   Pressable,
 } from 'react-native';
-import { Text, ActivityIndicator, Chip, Appbar , useTheme } from 'react-native-paper';
+import { Text, ActivityIndicator, Chip, Appbar } from 'react-native-paper';
 import { frigateApi, Event } from '../services/frigateApi';
 
 export const EventsScreen = ({ navigation }: any) => {
-  const theme = useTheme();
-  const styles = createStyles(theme);
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -114,23 +112,23 @@ export const EventsScreen = ({ navigation }: any) => {
   );
 };
 
-const createStyles = (theme: any) => StyleSheet.create({
+const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.colors.background,
+    backgroundColor: '#121212',
   },
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: theme.colors.background,
+    backgroundColor: '#121212',
   },
   listContent: {
     padding: 16,
   },
   eventCard: {
     flexDirection: 'row',
-    backgroundColor: theme.colors.surface,
+    backgroundColor: '#1E1E1E',
     borderRadius: 12,
     marginBottom: 16,
     overflow: 'hidden',
@@ -152,12 +150,12 @@ const createStyles = (theme: any) => StyleSheet.create({
     justifyContent: 'space-between',
   },
   eventCamera: {
-    color: theme.colors.onSurface,
+    color: '#FFFFFF',
     textTransform: 'capitalize',
     flex: 1,
   },
   eventTime: {
-    color: theme.colors.onSurfaceVariant,
+    color: '#9E9E9E',
   },
   chipText: {
     fontSize: 12,
@@ -165,9 +163,9 @@ const createStyles = (theme: any) => StyleSheet.create({
   },
   loadingText: {
     marginTop: 16,
-    color: theme.colors.onSurfaceVariant,
+    color: '#9E9E9E',
   },
   emptyText: {
-    color: theme.colors.onSurfaceVariant,
+    color: '#9E9E9E',
   },
 });

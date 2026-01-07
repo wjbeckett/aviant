@@ -7,13 +7,11 @@ import {
   ScrollView,
   Alert,
 } from 'react-native';
-import { TextInput, Button, Text, Divider, HelperText , useTheme } from 'react-native-paper';
+import { TextInput, Button, Text, Divider, HelperText } from 'react-native-paper';
 import * as Sentry from '@sentry/react-native';
 import { useAuth } from '../context/AuthContext';
 
 export const AuthScreen = () => {
-  const styles = createStyles(theme);
-  const theme = useTheme();
   const { login } = useAuth();
   const [localUrl, setLocalUrl] = useState('');
   const [remoteUrl, setRemoteUrl] = useState('');
@@ -174,10 +172,10 @@ export const AuthScreen = () => {
   );
 };
 
-const createStyles = (theme: any) => StyleSheet.create({
+const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.colors.background,
+    backgroundColor: '#121212',
   },
   scrollContent: {
     flexGrow: 1,
@@ -189,34 +187,34 @@ const createStyles = (theme: any) => StyleSheet.create({
     marginBottom: 48,
   },
   title: {
-    color: theme.colors.primary,
+    color: '#2196F3',
     fontWeight: 'bold',
     marginBottom: 8,
   },
   subtitle: {
-    color: theme.colors.onSurfaceVariant,
+    color: '#9E9E9E',
   },
   form: {
     width: '100%',
   },
   sectionTitle: {
-    color: theme.colors.onSurface,
+    color: '#FFFFFF',
     marginBottom: 8,
     marginTop: 8,
   },
   divider: {
     marginVertical: 16,
-    backgroundColor: theme.colors.outline,
+    backgroundColor: '#424242',
   },
   input: {
     marginBottom: 8,
   },
   optionalLabel: {
-    color: theme.colors.onSurface,
+    color: '#FFFFFF',
     marginBottom: 8,
   },
   helpText: {
-    color: theme.colors.onSurfaceVariant,
+    color: '#9E9E9E',
     marginBottom: 16,
   },
   button: {
