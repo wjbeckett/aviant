@@ -17,12 +17,14 @@ import {
   View,
   StyleSheet,
   ActivityIndicator,
-  SafeAreaView,
   Dimensions,
   ScrollView,
   TouchableOpacity,
   Platform,
+  AppState,
+  StatusBar,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   Appbar,
   IconButton,
@@ -35,6 +37,7 @@ import {
 import { RTCView, MediaStream } from 'react-native-webrtc';
 import Video, { VideoRef } from 'react-native-video';
 import { WebRTCConnection } from '../services/webrtcService';
+import { MSEStreamService, createMSEStream } from '../services/mseStreamService';
 import { frigateRecordingsApi } from '../services/frigateRecordingsApi';
 import { frigateApi } from '../services/frigateApi';
 import { format } from 'date-fns';
@@ -42,7 +45,7 @@ import * as Sentry from '@sentry/react-native';
 import { VerticalTimeline } from '../components/VerticalTimeline';
 
 type PlaybackMode = 'live' | 'timeline';
-type StreamType = 'webrtc' | 'hls';
+type StreamType = 'webrtc' | 'mse' | 'hls';  // Added MSE option
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const SCREEN_HEIGHT = Dimensions.get('window').height;
@@ -61,7 +64,7 @@ interface TimelineEvent {
 export const CameraLiveScreenWebRTC = ({ route, navigation }: any) => {
   const theme = useTheme();
   const styles = createStyles(theme);
-  const { cameraName } = route.params;
+  const { cameraName, initialTimestamp } = route.params;
   
   // Stream state
   const [streamType, setStreamType] = useState<StreamType>('webrtc');
@@ -70,7 +73,10 @@ export const CameraLiveScreenWebRTC = ({ route, navigation }: any) => {
   const [connectionState, setConnectionState] = useState<string>('new');
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
   const [hlsUrl, setHlsUrl] = useState<string | null>(null);
+  const [mseUrl, setMseUrl] = useState<string | null>(null);
+  const [mseCodec, setMseCodec] = useState<string | null>(null);
   const webrtcConnection = useRef<WebRTCConnection | null>(null);
+  const mseStreamService = useRef<MSEStreamService | null>(null);
   
   // Playback state
   const [playbackMode, setPlaybackMode] = useState<PlaybackMode>('live');
@@ -78,6 +84,7 @@ export const CameraLiveScreenWebRTC = ({ route, navigation }: any) => {
   const [recordingUrl, setRecordingUrl] = useState<string | null>(null);
   const [recordingReady, setRecordingReady] = useState(false);
   const [buffering, setBuffering] = useState(false);
+  const [recordingEndTime, setRecordingEndTime] = useState<number>(0); // Track where current clip ends
   const videoRef = useRef<VideoRef>(null);
   
   // Timeline state
@@ -87,24 +94,109 @@ export const CameraLiveScreenWebRTC = ({ route, navigation }: any) => {
   const [isScrolling, setIsScrolling] = useState(false);
   const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Initialize WebRTC on mount
+  // Initialize stream on mount - check codec first
   useEffect(() => {
-    console.log('[CameraLive WebRTC] Initializing for camera:', cameraName);
-    initializeWebRTC();
+    console.log('[CameraLive] Initializing for camera:', cameraName);
+    
+    const initializeStream = async () => {
+      // Check if camera is H265 - if so, skip WebRTC and go straight to MSE
+      const isH265 = await frigateApi.isH265Camera(cameraName);
+      if (isH265) {
+        console.log('[CameraLive] H265 camera detected, using MSE directly');
+        fallbackToMSE();
+      } else {
+        console.log('[CameraLive] H264 camera, using WebRTC');
+        initializeWebRTC();
+      }
+    };
+    
+    initializeStream();
     fetchRecentEvents();
 
+    // If we have an initial timestamp (from tapping an event), start playback there
+    if (initialTimestamp) {
+      console.log('[CameraLive] Starting at timestamp:', new Date(initialTimestamp).toLocaleString());
+      // Small delay to let the stream initialize first
+      setTimeout(() => {
+        handleTimeSelect(initialTimestamp);
+      }, 1000);
+    }
+
     return () => {
-      console.log('[CameraLive WebRTC] Cleaning up');
+      console.log('[CameraLive] Cleaning up');
       webrtcConnection.current?.disconnect();
+      mseStreamService.current?.stop();
     };
   }, [cameraName]);
 
-  // Fallback to HLS stream
+  // Stop streaming when app goes to background (battery saving)
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      if (nextAppState === 'background' || nextAppState === 'inactive') {
+        console.log('[CameraLive] App backgrounded, stopping streams');
+        webrtcConnection.current?.disconnect();
+        mseStreamService.current?.stop();
+      } else if (nextAppState === 'active') {
+        console.log('[CameraLive] App active, reconnecting');
+        // Only reconnect if we were in live mode
+        if (playbackMode === 'live') {
+          initializeWebRTC();
+        }
+      }
+    });
+
+    return () => subscription.remove();
+  }, [playbackMode]);
+
+  // Fallback to MSE stream (best option for H265 - uses local HTTP proxy)
+  const fallbackToMSE = useCallback(async () => {
+    console.log('[CameraLive] Falling back to MSE stream (fMP4 proxy)');
+    webrtcConnection.current?.disconnect();
+    setStreamType('mse');
+    setRemoteStream(null);
+    setLoading(true);
+    setConnectionState('connecting');
+    
+    try {
+      // Create MSE stream service
+      const mseService = createMSEStream({
+        cameraName,
+        onReady: (localUrl) => {
+          console.log('[CameraLive] MSE stream ready:', localUrl);
+          setMseUrl(localUrl);
+          setLoading(false);
+          setConnectionState('mse');
+        },
+        onCodecInfo: (mimeType) => {
+          console.log('[CameraLive] MSE codec:', mimeType);
+          setMseCodec(mimeType);
+        },
+        onError: (err) => {
+          console.error('[CameraLive] MSE error:', err);
+          // Fall back to HLS if MSE fails
+          fallbackToHLS();
+        },
+        onStats: (stats) => {
+          console.log('[CameraLive] MSE stats:', stats);
+        }
+      });
+      
+      mseStreamService.current = mseService;
+      await mseService.start();
+    } catch (err) {
+      console.error('[CameraLive] MSE failed, falling back to HLS:', err);
+      fallbackToHLS();
+    }
+  }, [cameraName]);
+
+  // Fallback to HLS stream (last resort - higher latency)
   const fallbackToHLS = useCallback(() => {
     console.log('[CameraLive] Falling back to HLS stream');
     webrtcConnection.current?.disconnect();
+    mseStreamService.current?.stop();
     setStreamType('hls');
     setRemoteStream(null);
+    setMseUrl(null);
     
     // Build HLS URL
     const baseUrl = frigateApi.getBaseUrl();
@@ -138,9 +230,9 @@ export const CameraLiveScreenWebRTC = ({ route, navigation }: any) => {
           }
         },
         onCodecError: (err) => {
-          // H265/HEVC codec not supported - fallback to HLS
-          console.log('[CameraLive] Codec error, falling back to HLS:', err.message);
-          fallbackToHLS();
+          // H265/HEVC codec not supported by WebRTC - try MSE first (lower latency)
+          console.log('[CameraLive] Codec error, trying MSE fallback:', err.message);
+          fallbackToMSE();
         },
         onError: (err) => {
           console.error('[CameraLive WebRTC] Error:', err);
@@ -174,14 +266,25 @@ export const CameraLiveScreenWebRTC = ({ route, navigation }: any) => {
       const now = Date.now();
       const oneHourAgo = now - 60 * 60 * 1000;
       
+      console.log(`[Timeline] Fetching events for ${cameraName} from ${new Date(oneHourAgo).toLocaleTimeString()} to ${new Date(now).toLocaleTimeString()}`);
+      
       const eventData = await frigateRecordingsApi.getEventsInRange(
         cameraName,
         oneHourAgo,  // Pass milliseconds, API converts to seconds
         now
       );
       
-      setEvents(eventData);
-      console.log(`[Timeline] Loaded ${eventData.length} events`);
+      // Map to TimelineEvent format
+      const timelineEvents: TimelineEvent[] = eventData.map(e => ({
+        id: e.id,
+        label: e.label,
+        start_time: e.start_time,
+        end_time: e.end_time || e.start_time + 10, // Default duration if still active
+        has_clip: e.has_clip,
+      }));
+      
+      setEvents(timelineEvents);
+      console.log(`[Timeline] Loaded ${timelineEvents.length} events:`, timelineEvents.map(e => `${e.label}@${new Date(e.start_time * 1000).toLocaleTimeString()}`));
     } catch (err) {
       console.error('[Timeline] Failed to fetch events:', err);
     } finally {
@@ -240,24 +343,48 @@ export const CameraLiveScreenWebRTC = ({ route, navigation }: any) => {
       setBuffering(true);
       
       try {
-        // Get 30-second clip around selected time
-        const startTime = Math.floor(timestamp / 1000) - 15;
-        const endTime = Math.floor(timestamp / 1000) + 15;
+        // Start from selected time, play until NOW
+        const startTime = Math.floor(timestamp / 1000);
+        const endTime = Math.floor(Date.now() / 1000);
         
-        const url = frigateRecordingsApi.getRecordingUrl(
-          cameraName,
-          startTime,
-          endTime
-        );
-        
-        console.log('[Timeline] Loading recording:', url);
-        setRecordingUrl(url);
-        // Keep live stream visible until recording is ready (onReadyForDisplay)
+        loadRecordingSegment(startTime, endTime);
       } catch (err) {
         console.error('[Timeline] Failed to load recording:', err);
         setError('Failed to load recording');
         setBuffering(false);
       }
+    }
+  };
+
+  // Load a recording segment
+  const loadRecordingSegment = (startTime: number, endTime: number) => {
+    const url = frigateRecordingsApi.getRecordingUrl(cameraName, startTime, endTime);
+    
+    const durationMinutes = ((endTime - startTime) / 60).toFixed(1);
+    console.log('[Timeline] Loading segment:', new Date(startTime * 1000).toLocaleTimeString(), '-', new Date(endTime * 1000).toLocaleTimeString());
+    console.log('[Timeline] Duration:', durationMinutes, 'minutes');
+    
+    setRecordingEndTime(endTime); // Track where this clip ends
+    setRecordingUrl(url);
+    setRecordingReady(false);
+  };
+
+  // Handle when recording segment ends - load next segment or go live
+  const handleRecordingEnd = () => {
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    const gap = nowSeconds - recordingEndTime;
+    
+    console.log('[Timeline] Segment ended. Gap to live:', gap, 'seconds');
+    
+    // If we're within 10 seconds of live, switch to live stream
+    if (gap <= 10) {
+      console.log('[Timeline] Caught up! Switching to live');
+      handleGoLive();
+    } else {
+      // Load next segment from where we left off to NOW
+      console.log('[Timeline] Loading next segment to catch up...');
+      setBuffering(true);
+      loadRecordingSegment(recordingEndTime, nowSeconds);
     }
   };
 
@@ -308,7 +435,11 @@ export const CameraLiveScreenWebRTC = ({ route, navigation }: any) => {
   const showRecording = playbackMode === 'timeline' && recordingReady;
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['left', 'right', 'bottom']}>
+      <StatusBar 
+        barStyle={theme.dark ? 'light-content' : 'dark-content'} 
+        backgroundColor={theme.colors.surface}
+      />
       {/* Header */}
       <Appbar.Header>
         <Appbar.BackAction onPress={() => navigation.goBack()} />
@@ -321,7 +452,7 @@ export const CameraLiveScreenWebRTC = ({ route, navigation }: any) => {
               styles.statusDot,
               {
                 backgroundColor:
-                  playbackMode === 'live' && (connectionState === 'connected' || connectionState === 'hls')
+                  playbackMode === 'live' && (connectionState === 'connected' || connectionState === 'mse' || connectionState === 'hls')
                     ? '#4CAF50'
                     : playbackMode === 'timeline'
                     ? '#2196F3'
@@ -335,6 +466,8 @@ export const CameraLiveScreenWebRTC = ({ route, navigation }: any) => {
             {playbackMode === 'live'
               ? connectionState === 'connected'
                 ? 'LIVE'
+                : connectionState === 'mse'
+                ? 'LIVE (MSE)'
                 : connectionState === 'hls'
                 ? 'LIVE (HLS)'
                 : connectionState.toUpperCase()
@@ -388,7 +521,37 @@ export const CameraLiveScreenWebRTC = ({ route, navigation }: any) => {
           />
         )}
         
-        {/* Live HLS Stream (fallback for H265 cameras) */}
+        {/* Live MSE Stream (fMP4 proxy - best for H265) */}
+        {streamType === 'mse' && mseUrl && showLiveStream && (
+          <Video
+            source={{ uri: mseUrl }}
+            style={[styles.videoPlayer, { zIndex: showLiveStream ? 2 : 1 }]}
+            resizeMode="cover"
+            controls={false}
+            paused={false}
+            repeat={false}
+            bufferConfig={{
+              minBufferMs: 500,
+              maxBufferMs: 2000,
+              bufferForPlaybackMs: 250,
+              bufferForPlaybackAfterRebufferMs: 500,
+            }}
+            onReadyForDisplay={() => {
+              console.log('[MSE] Ready for display');
+              setLoading(false);
+            }}
+            onBuffer={({ isBuffering }) => {
+              console.log('[MSE] Buffering:', isBuffering);
+            }}
+            onError={(error) => {
+              console.error('[MSE] Playback error:', error);
+              // Fall back to HLS if MSE playback fails
+              fallbackToHLS();
+            }}
+          />
+        )}
+
+        {/* Live HLS Stream (last resort fallback for H265 cameras) */}
         {streamType === 'hls' && hlsUrl && showLiveStream && (
           <Video
             source={{ 
@@ -414,7 +577,7 @@ export const CameraLiveScreenWebRTC = ({ route, navigation }: any) => {
           />
         )}
 
-        {/* Timeline Playback (MP4 Recording) - rendered behind live until ready */}
+        {/* Timeline Playback (MP4 Recording) */}
         {playbackMode === 'timeline' && recordingUrl && (
           <Video
             ref={videoRef}
@@ -422,25 +585,35 @@ export const CameraLiveScreenWebRTC = ({ route, navigation }: any) => {
             style={[
               styles.videoPlayer,
               { 
-                zIndex: recordingReady ? 2 : 1,
-                opacity: recordingReady ? 1 : 0,
+                zIndex: 10, // Always on top when in timeline mode
               },
             ]}
             resizeMode="cover"
-            controls={false}
+            controls={true}
             paused={false}
-            repeat={true}
+            repeat={false}
             onReadyForDisplay={() => {
-              console.log('[Video] Ready for display');
+              console.log('[Recording] Ready for display, URL:', recordingUrl.substring(0, 80));
               setRecordingReady(true);
               setBuffering(false);
             }}
             onBuffer={({ isBuffering }) => {
-              console.log('[Video] Buffering:', isBuffering);
+              console.log('[Recording] Buffering:', isBuffering);
               setBuffering(isBuffering);
             }}
+            onProgress={({ currentTime }) => {
+              // Log progress every 5 seconds
+              if (Math.floor(currentTime) % 5 === 0) {
+                console.log('[Recording] Progress:', Math.floor(currentTime), 'seconds');
+              }
+            }}
+            onEnd={() => {
+              // Recording segment ended - load next or go live
+              console.log('[Recording] Segment ended');
+              handleRecordingEnd();
+            }}
             onError={(error) => {
-              console.error('[Video] Playback error:', error);
+              console.error('[Recording] Playback error:', error);
               setError('Failed to play recording');
               setBuffering(false);
               // Fall back to live
@@ -473,9 +646,15 @@ export const CameraLiveScreenWebRTC = ({ route, navigation }: any) => {
         </Surface>
       )}
 
+      {playbackMode === 'live' && streamType === 'mse' && mseUrl && (
+        <Surface style={styles.infoBanner}>
+          <Text style={styles.infoText}>🚀 MSE Proxy • H265 Low Latency{mseCodec ? ` • ${mseCodec.split(';')[0]}` : ''}</Text>
+        </Surface>
+      )}
+
       {playbackMode === 'live' && streamType === 'hls' && hlsUrl && (
         <Surface style={styles.infoBanner}>
-          <Text style={styles.infoText}>📺 HLS • H265 Native Decode</Text>
+          <Text style={styles.infoText}>📺 HLS • H265 (Higher Latency)</Text>
         </Surface>
       )}
 

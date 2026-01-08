@@ -81,6 +81,8 @@ class FrigateRecordingsApi {
 
   /**
    * Get recording URL for a specific time range
+   * @param startTimestamp - Unix timestamp in SECONDS
+   * @param endTimestamp - Unix timestamp in SECONDS
    */
   getRecordingUrl(
     camera: string,
@@ -90,11 +92,8 @@ class FrigateRecordingsApi {
     const baseUrl = frigateApi.getBaseUrl();
     const token = frigateApi.getJWTToken();
 
-    // Convert milliseconds to seconds with decimals
-    const start = (startTimestamp / 1000).toFixed(3);
-    const end = (endTimestamp / 1000).toFixed(3);
-
-    return `${baseUrl}/api/${camera}/start/${start}/end/${end}?token=${token}`;
+    // Frigate recording endpoint requires /clip.mp4 suffix
+    return `${baseUrl}/api/${camera}/start/${startTimestamp}/end/${endTimestamp}/clip.mp4?token=${token}`;
   }
 
   /**

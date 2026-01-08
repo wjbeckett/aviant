@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   Alert,
   Modal,
+  StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -178,6 +179,10 @@ function SettingsScreen({ route }: Props) {
 
   return (
     <SafeAreaView style={styles.container}>
+      <StatusBar 
+        barStyle={theme.dark ? 'light-content' : 'dark-content'} 
+        backgroundColor={theme.colors.surface}
+      />
       {/* Header with Back Button */}
       <View style={styles.header}>
         <TouchableOpacity

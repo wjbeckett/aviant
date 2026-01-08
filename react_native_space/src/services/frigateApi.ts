@@ -312,6 +312,42 @@ class FrigateApiService {
     }));
   }
 
+  /**
+   * Get camera codec info from go2rtc streams API
+   * Returns 'hevc' for H265, 'h264' for H264, etc.
+   */
+  async getCameraCodec(cameraName: string): Promise<string> {
+    try {
+      const client = this.ensureClient();
+      const response = await client.get('/api/go2rtc/api/streams');
+      const streams = response.data;
+      
+      const stream = streams[cameraName];
+      if (!stream) return 'unknown';
+      
+      for (const producer of stream.producers || []) {
+        for (const receiver of producer.receivers || []) {
+          const codec = receiver.codec;
+          if (codec?.codec_type === 'video') {
+            return codec.codec_name || 'unknown';
+          }
+        }
+      }
+      return 'unknown';
+    } catch (err) {
+      console.error('[FrigateAPI] Failed to get camera codec:', err);
+      return 'unknown';
+    }
+  }
+
+  /**
+   * Check if camera uses H265/HEVC codec (not compatible with WebRTC)
+   */
+  async isH265Camera(cameraName: string): Promise<boolean> {
+    const codec = await this.getCameraCodec(cameraName);
+    return codec === 'hevc' || codec === 'h265';
+  }
+
   async getEvents(params?: {
     camera?: string;
     label?: string;
@@ -333,6 +369,11 @@ class FrigateApiService {
   getEventThumbnailUrl(eventId: string): string {
     const token = this.jwtToken ? `?token=${this.jwtToken}` : '';
     return `${this.baseUrl}/api/events/${eventId}/thumbnail.jpg${token}`;
+  }
+
+  getEventPreviewUrl(eventId: string): string {
+    const token = this.jwtToken ? `?token=${this.jwtToken}` : '';
+    return `${this.baseUrl}/api/events/${eventId}/preview.gif${token}`;
   }
 
   getEventClipUrl(eventId: string): string {

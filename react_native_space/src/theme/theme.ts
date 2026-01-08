@@ -53,10 +53,10 @@ export const lightTheme = {
     ...MD3LightTheme.colors,
     ...brandColors,
     
-    // Backgrounds
-    background: '#F5F5F5',
+    // Backgrounds - cleaner white
+    background: '#FFFFFF',
     surface: '#FFFFFF',
-    surfaceVariant: '#F0F0F0',
+    surfaceVariant: '#F5F5F5',
     
     // Text
     text: '#000000', // Primary text color

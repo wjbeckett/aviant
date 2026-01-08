@@ -82,9 +82,9 @@ function MainTabs({ themePreference, onThemeChange }: MainTabsProps) {
         name="LiveTab"
         component={LiveCamerasScreen}
         options={{
-          tabBarLabel: 'Live',
+          tabBarLabel: 'Home',
           tabBarIcon: ({ color, size }) => (
-            <MaterialCommunityIcons name="video" size={size} color={color} />
+            <MaterialCommunityIcons name="speedometer" size={size} color={color} />
           ),
         }}
       />

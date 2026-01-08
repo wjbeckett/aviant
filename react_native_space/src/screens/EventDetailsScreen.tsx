@@ -1,13 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   StyleSheet,
   ScrollView,
   Image,
   Platform,
-  Linking,
+  StatusBar,
 } from 'react-native';
-import { Text, Button, ActivityIndicator, IconButton , useTheme } from 'react-native-paper';
+import { Text, Button, ActivityIndicator, IconButton, useTheme } from 'react-native-paper';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import Video, { VideoRef } from 'react-native-video';
 import { frigateApi, Event } from '../services/frigateApi';
 
 export const EventDetailsScreen = ({ route, navigation }: any) => {
@@ -16,6 +18,9 @@ export const EventDetailsScreen = ({ route, navigation }: any) => {
   const { eventId } = route.params;
   const [event, setEvent] = useState<Event | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showVideo, setShowVideo] = useState(false);
+  const [videoLoading, setVideoLoading] = useState(false);
+  const videoRef = useRef<VideoRef>(null);
 
   useEffect(() => {
     loadEvent();
@@ -34,8 +39,8 @@ export const EventDetailsScreen = ({ route, navigation }: any) => {
 
   const handleViewClip = () => {
     if (event) {
-      const clipUrl = frigateApi.getEventClipUrl(event.id);
-      Linking.openURL(clipUrl);
+      setShowVideo(true);
+      setVideoLoading(true);
     }
   };
 
@@ -52,28 +57,33 @@ export const EventDetailsScreen = ({ route, navigation }: any) => {
 
   if (loading) {
     return (
-      <View style={styles.centerContainer}>
+      <SafeAreaView style={styles.centerContainer}>
+        <StatusBar barStyle={theme.dark ? 'light-content' : 'dark-content'} backgroundColor={theme.colors.surface} />
         <ActivityIndicator size="large" />
         <Text style={styles.loadingText}>Loading event...</Text>
-      </View>
+      </SafeAreaView>
     );
   }
 
   if (!event) {
     return (
-      <View style={styles.centerContainer}>
+      <SafeAreaView style={styles.centerContainer}>
+        <StatusBar barStyle={theme.dark ? 'light-content' : 'dark-content'} backgroundColor={theme.colors.surface} />
         <Text style={styles.errorText}>Event not found</Text>
-      </View>
+      </SafeAreaView>
     );
   }
 
+  const clipUrl = frigateApi.getEventClipUrl(event.id);
+
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right', 'bottom']}>
+      <StatusBar barStyle={theme.dark ? 'light-content' : 'dark-content'} backgroundColor={theme.colors.surface} />
       <View style={styles.header}>
         <IconButton
           icon="arrow-left"
           size={24}
-          iconColor="#FFF"
+          iconColor={theme.colors.onSurface}
           onPress={() => navigation.goBack()}
         />
         <Text variant="titleLarge" style={styles.title}>
@@ -83,11 +93,42 @@ export const EventDetailsScreen = ({ route, navigation }: any) => {
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        <Image
-          source={{ uri: frigateApi.getEventThumbnailUrl(event.id) }}
-          style={styles.thumbnail}
-          resizeMode="contain"
-        />
+        {/* Video Player or Thumbnail */}
+        {showVideo ? (
+          <View style={styles.videoContainer}>
+            <Video
+              ref={videoRef}
+              source={{ uri: clipUrl }}
+              style={styles.video}
+              resizeMode="contain"
+              controls={true}
+              paused={false}
+              onReadyForDisplay={() => setVideoLoading(false)}
+              onError={(err) => {
+                console.error('[EventDetails] Video error:', err);
+                setVideoLoading(false);
+              }}
+            />
+            {videoLoading && (
+              <View style={styles.videoLoading}>
+                <ActivityIndicator size="large" color="#FFF" />
+              </View>
+            )}
+            <IconButton
+              icon="close"
+              size={24}
+              iconColor="#FFF"
+              style={styles.closeVideoButton}
+              onPress={() => setShowVideo(false)}
+            />
+          </View>
+        ) : (
+          <Image
+            source={{ uri: frigateApi.getEventThumbnailUrl(event.id) }}
+            style={styles.thumbnail}
+            resizeMode="contain"
+          />
+        )}
 
         <View style={styles.detailsContainer}>
           <View style={styles.detailRow}>
@@ -130,7 +171,7 @@ export const EventDetailsScreen = ({ route, navigation }: any) => {
         </View>
 
         <View style={styles.actions}>
-          {event.has_clip && (
+          {event.has_clip && !showVideo && (
             <Button
               mode="contained"
               onPress={handleViewClip}
@@ -150,7 +191,7 @@ export const EventDetailsScreen = ({ route, navigation }: any) => {
           </Button>
         </View>
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 };
 
@@ -190,6 +231,35 @@ const createStyles = (theme: any) => StyleSheet.create({
     backgroundColor: '#000',
     borderRadius: 12,
     marginBottom: 24,
+  },
+  videoContainer: {
+    width: '100%',
+    height: 300,
+    backgroundColor: '#000',
+    borderRadius: 12,
+    marginBottom: 24,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  video: {
+    width: '100%',
+    height: '100%',
+  },
+  videoLoading: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  closeVideoButton: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: 'rgba(0,0,0,0.5)',
   },
   detailsContainer: {
     backgroundColor: theme.colors.surface,

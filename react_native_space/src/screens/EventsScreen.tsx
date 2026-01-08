@@ -6,8 +6,9 @@ import {
   RefreshControl,
   Image,
   Pressable,
+  StatusBar,
 } from 'react-native';
-import { Text, ActivityIndicator, Chip, Appbar , useTheme } from 'react-native-paper';
+import { Text, ActivityIndicator, Chip, Appbar, useTheme } from 'react-native-paper';
 import { frigateApi, Event } from '../services/frigateApi';
 
 export const EventsScreen = ({ navigation }: any) => {
@@ -72,6 +73,7 @@ export const EventsScreen = ({ navigation }: any) => {
   if (loading) {
     return (
       <View style={styles.container}>
+        <StatusBar barStyle={theme.dark ? 'light-content' : 'dark-content'} backgroundColor={theme.colors.surface} />
         <Appbar.Header>
           <Appbar.Content title="Events" />
         </Appbar.Header>
@@ -86,6 +88,7 @@ export const EventsScreen = ({ navigation }: any) => {
   if (events.length === 0) {
     return (
       <View style={styles.container}>
+        <StatusBar barStyle={theme.dark ? 'light-content' : 'dark-content'} backgroundColor={theme.colors.surface} />
         <Appbar.Header>
           <Appbar.Content title="Events" />
         </Appbar.Header>
@@ -98,6 +101,7 @@ export const EventsScreen = ({ navigation }: any) => {
 
   return (
     <View style={styles.container}>
+      <StatusBar barStyle={theme.dark ? 'light-content' : 'dark-content'} backgroundColor={theme.colors.surface} />
       <Appbar.Header>
         <Appbar.Content title="Events" />
       </Appbar.Header>
