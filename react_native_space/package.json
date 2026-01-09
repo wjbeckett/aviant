@@ -41,7 +41,7 @@
     "react-dom": "19.1.0"
   },
   "name": "react_native_space",
-  "version": "0.10.0",
+  "version": "0.10.1",
   "scripts": {
     "android": "expo run:android",
     "ios": "expo run:ios"

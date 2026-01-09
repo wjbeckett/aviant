@@ -80,7 +80,7 @@ export const SmartCameraThumbnail: React.FC<SmartCameraThumbnailProps> = ({
       <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { background: #000; overflow: hidden; }
-        video { width: 100%; height: 100%; object-fit: cover; }
+        video { width: 100%; height: 100%; object-fit: contain; background: #000; }
       </style>
     </head>
     <body>
@@ -245,7 +245,7 @@ export const SmartCameraThumbnail: React.FC<SmartCameraThumbnailProps> = ({
       <SmoothImage
         source={{ uri: imageUrl }}
         style={styles.image}
-        resizeMode="cover"
+        resizeMode="contain"
         onLoad={handleImageLoad}
       />
 

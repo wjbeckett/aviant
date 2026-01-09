@@ -251,7 +251,7 @@ function SettingsScreen({ route }: Props) {
 
         {/* App Info */}
         <View style={styles.footer}>
-          <Text style={styles.footerText}>Aviant v0.10.0</Text>
+          <Text style={styles.footerText}>Aviant v0.10.1</Text>
         </View>
       </ScrollView>
 
