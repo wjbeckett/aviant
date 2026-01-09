@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   StyleSheet,
@@ -6,17 +6,19 @@ import {
   RefreshControl,
   Image,
   Pressable,
-  Alert,
   StatusBar,
   ScrollView,
   Modal,
   TouchableOpacity,
   Dimensions,
+  Alert,
 } from 'react-native';
 import { Text, ActivityIndicator, Button, useTheme } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { frigateApi, Camera, Event } from '../services/frigateApi';
+import { frigateWebSocket, CameraActivityMap, FrigateEventMessage } from '../services/frigateWebSocket';
+import { SmartCameraThumbnail } from '../components/SmartCameraThumbnail';
 import { useAuth } from '../context/AuthContext';
 import { useFocusEffect } from '@react-navigation/native';
 
@@ -39,6 +41,10 @@ export const LiveCamerasScreen = ({ navigation }: any) => {
   const [showConnectionTooltip, setShowConnectionTooltip] = useState(false);
   const [isConnected, setIsConnected] = useState(true);
   const [cameraLastMotion, setCameraLastMotion] = useState<Record<string, number>>({});
+  const [cameraThumbnailTimestamps, setCameraThumbnailTimestamps] = useState<Record<string, number>>({});
+  const [cameraMotionActive, setCameraMotionActive] = useState<Record<string, boolean>>({});
+  const [cameraActiveDetections, setCameraActiveDetections] = useState<Record<string, boolean>>({});
+  const [wsConnected, setWsConnected] = useState(false);
 
   const screenWidth = Dimensions.get('window').width;
 
@@ -75,15 +81,177 @@ export const LiveCamerasScreen = ({ navigation }: any) => {
     }
   }, []);
 
+  // Load last motion times from recent events
+  const loadLastMotionTimes = useCallback(async () => {
+    try {
+      const events = await frigateApi.getEvents({ limit: 20 });
+      const lastMotionMap: Record<string, number> = {};
+      events.forEach(event => {
+        if (!lastMotionMap[event.camera] || event.start_time > lastMotionMap[event.camera]) {
+          lastMotionMap[event.camera] = event.start_time;
+        }
+      });
+      setCameraLastMotion(lastMotionMap);
+    } catch (err) {
+      console.error('[LiveCameras] Failed to load motion times:', err);
+    }
+  }, []);
+
+  // Handle WebSocket camera activity updates (motion state) - for live switching
+  const handleCameraActivity = useCallback((activity: CameraActivityMap) => {
+    const newMotionState: Record<string, boolean> = {};
+    
+    for (const [camera, state] of Object.entries(activity)) {
+      newMotionState[camera] = state.motion;
+    }
+    
+    // Log cameras with motion
+    const camerasWithMotion = Object.entries(newMotionState)
+      .filter(([_, motion]) => motion)
+      .map(([cam]) => cam);
+    if (camerasWithMotion.length > 0) {
+      console.log('[Dashboard] Cameras with motion:', camerasWithMotion.join(', '));
+    }
+    
+    setCameraMotionActive(prev => {
+      const changed = Object.entries(newMotionState).some(
+        ([cam, motion]) => prev[cam] !== motion
+      );
+      if (changed) {
+        console.log('[Dashboard] Motion state changed:', newMotionState);
+      }
+      if (!changed) return prev;
+      return { ...prev, ...newMotionState };
+    });
+  }, []);
+
+  // Refresh all thumbnails (called on mount and focus)
+  const refreshAllThumbnails = useCallback(() => {
+    const now = Date.now();
+    console.log('[Dashboard] Refreshing all thumbnails at', now);
+    setCameraThumbnailTimestamps(prev => {
+      const updated: Record<string, number> = {};
+      cameras.forEach(camera => {
+        updated[camera.name] = now;
+      });
+      return updated;
+    });
+  }, [cameras]);
+
+  // Initial load
   useEffect(() => {
+    console.log('[Dashboard] Initial load');
     loadCameras();
     loadRecentEvents();
-  }, [loadCameras, loadRecentEvents]);
+    loadLastMotionTimes();
+  }, [loadCameras, loadRecentEvents, loadLastMotionTimes]);
 
+  // Set up WebSocket connection and intervals
+  useEffect(() => {
+    if (cameras.length === 0) return;
+    
+    console.log('[Dashboard] Setting up WebSocket and intervals for', cameras.length, 'cameras');
+    
+    // Initial refresh
+    refreshAllThumbnails();
+    
+    // Connect to WebSocket for real-time events
+    frigateWebSocket.connect();
+    
+    // Subscribe to camera activity (motion topics) for live switching
+    const unsubscribeActivity = frigateWebSocket.onCameraActivity(handleCameraActivity);
+    
+    // Track active detections per camera for red border + live event ribbon updates
+    const detectionTimeouts: Record<string, NodeJS.Timeout> = {};
+    const addedEventIds = new Set<string>();
+    
+    const unsubscribeEvents = frigateWebSocket.onEvent((event, camera, label) => {
+      const payload = event.after;
+      const isLive = payload.active && !payload.stationary && !payload.end_time;
+      const eventType = event.type;
+      
+      if (isLive) {
+        // Clear any pending timeout
+        if (detectionTimeouts[camera]) {
+          clearTimeout(detectionTimeouts[camera]);
+        }
+        setCameraActiveDetections(prev => ({ ...prev, [camera]: true }));
+        // Auto-clear after 3 seconds if no more updates
+        detectionTimeouts[camera] = setTimeout(() => {
+          setCameraActiveDetections(prev => ({ ...prev, [camera]: false }));
+        }, 3000);
+      } else if (payload.end_time) {
+        // Detection ended
+        if (detectionTimeouts[camera]) {
+          clearTimeout(detectionTimeouts[camera]);
+        }
+        setCameraActiveDetections(prev => ({ ...prev, [camera]: false }));
+      }
+      
+      // Add new DETECTIONS to ribbon (notification-worthy items only)
+      const notificationLabels = ['person', 'car', 'dog', 'cat', 'package', 'motorcycle', 'bicycle', 'face', 'license_plate'];
+      const isNotificationWorthy = eventType === 'new' 
+        && notificationLabels.includes(payload.label)
+        && payload.top_score >= 0.5;
+      
+      if (isNotificationWorthy && !addedEventIds.has(payload.id)) {
+        addedEventIds.add(payload.id);
+        const newEvent: RecentEvent = {
+          id: payload.id,
+          camera: payload.camera,
+          label: payload.label,
+          start_time: payload.start_time,
+          end_time: payload.end_time || null,
+          has_clip: payload.has_clip,
+          has_snapshot: payload.has_snapshot,
+        };
+        setRecentEvents(prev => [newEvent, ...prev.slice(0, 19)]); // Keep max 20
+        console.log(`[Dashboard] 🔔 Detection added to ribbon: ${label} on ${camera} (score: ${payload.top_score.toFixed(2)})`);
+        
+        // Update last motion time for this camera
+        setCameraLastMotion(prev => ({
+          ...prev,
+          [camera]: payload.start_time
+        }));
+      }
+    });
+    
+    const unsubscribeConnection = frigateWebSocket.onConnectionChange((connected) => {
+      console.log('[Dashboard] WebSocket connected:', connected);
+      setWsConnected(connected);
+      setIsConnected(connected);
+    });
+    
+    // Periodic thumbnail refresh every 60 seconds (for idle cameras)
+    const thumbnailInterval = setInterval(() => {
+      console.log('[Dashboard] Periodic thumbnail refresh');
+      refreshAllThumbnails();
+    }, 60000);
+    
+    return () => {
+      unsubscribeActivity();
+      unsubscribeEvents();
+      unsubscribeConnection();
+      clearInterval(thumbnailInterval);
+      Object.values(detectionTimeouts).forEach(clearTimeout);
+      frigateWebSocket.disconnect();
+    };
+  }, [cameras.length, handleCameraActivity, refreshAllThumbnails]);
+
+  // Refresh on screen focus
   useFocusEffect(
     useCallback(() => {
+      console.log('[Dashboard] Screen focused');
       loadRecentEvents();
-    }, [loadRecentEvents])
+      loadLastMotionTimes();
+      if (cameras.length > 0) {
+        refreshAllThumbnails();
+      }
+      // Reconnect WebSocket if disconnected
+      if (!frigateWebSocket.isConnected()) {
+        frigateWebSocket.connect();
+      }
+    }, [loadRecentEvents, loadLastMotionTimes, cameras.length, refreshAllThumbnails])
   );
 
   const handleRefresh = () => {
@@ -173,12 +341,27 @@ export const LiveCamerasScreen = ({ navigation }: any) => {
     </Pressable>
   );
 
+  // Get thumbnail URL with cache-busting timestamp
+  const getThumbnailUrl = (cameraName: string) => {
+    const timestamp = cameraThumbnailTimestamps[cameraName] || Date.now();
+    const baseUrl = frigateApi.getCameraSnapshotUrl(cameraName);
+    return baseUrl.includes('?') ? `${baseUrl}&cache=${timestamp}` : `${baseUrl}?cache=${timestamp}`;
+  };
+
   // Camera card
   const renderCamera = ({ item, index }: { item: Camera; index: number }) => {
     const isStacked = layoutMode === 'stacked';
     const cardWidth = isStacked ? screenWidth : (screenWidth - 36) / 2;
     const cardHeight = isStacked ? (cardWidth * 9) / 16 : 90;
     const lastMotion = cameraLastMotion[item.name];
+    const hasMotion = cameraMotionActive[item.name] || false;
+    const hasDetection = cameraActiveDetections[item.name] || false;
+    const refreshTs = cameraThumbnailTimestamps[item.name] || 0;
+    
+    // Debug: log when hasMotion changes for this camera
+    if (hasMotion) {
+      console.log(`[renderCamera] ${item.name} hasMotion=${hasMotion}`);
+    }
 
     return (
       <Pressable
@@ -193,11 +376,15 @@ export const LiveCamerasScreen = ({ navigation }: any) => {
         ]}
         onPress={() => navigation.navigate('CameraLive', { cameraName: item.name })}
       >
-        <Image
-          source={{ uri: frigateApi.getCameraSnapshotUrl(item.name) }}
-          style={[styles.cameraImage, { height: cardHeight }]}
-          resizeMode="cover"
+        <SmartCameraThumbnail
+          cameraName={item.name}
+          width={cardWidth}
+          height={cardHeight}
+          isMotionActive={hasMotion}
+          hasActiveDetection={hasDetection}
+          refreshTimestamp={refreshTs}
         />
+        
         <View style={styles.cameraOverlay}>
           <Text style={styles.cameraName}>{item.name.replace(/_/g, ' ')}</Text>
           {lastMotion && (
@@ -280,11 +467,12 @@ export const LiveCamerasScreen = ({ navigation }: any) => {
   );
 
   // Section header component
+  const sectionHeaderColor = theme.dark ? '#FFFFFF' : '#949594';
   const SectionHeader = ({ icon, title, count, rightElement }: { icon: string; title: string; count?: number; rightElement?: React.ReactNode }) => (
     <View style={styles.sectionHeader}>
       <View style={styles.sectionTitleRow}>
-        <Ionicons name={icon as any} size={16} color={theme.colors.outline} />
-        <Text style={styles.sectionTitle}>{title}</Text>
+        <Ionicons name={icon as any} size={16} color={sectionHeaderColor} />
+        <Text style={[styles.sectionTitle, { color: sectionHeaderColor }]}>{title}</Text>
         {count !== undefined && (
           <Text style={styles.sectionCount}>{count}</Text>
         )}
@@ -386,6 +574,7 @@ export const LiveCamerasScreen = ({ navigation }: any) => {
               numColumns={layoutMode === 'grid' ? 2 : 1}
               key={layoutMode}
               scrollEnabled={false}
+              extraData={{ motion: cameraMotionActive, detections: cameraActiveDetections }}
               contentContainerStyle={layoutMode === 'grid' ? styles.camerasContainerGrid : styles.camerasContainerStacked}
             />
           )}
@@ -519,14 +708,14 @@ const createStyles = (theme: any) => StyleSheet.create({
   sectionTitle: {
     fontSize: 14,
     fontWeight: '600',
-    color: theme.colors.onSurfaceVariant,
+    color: '#949594',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   sectionCount: {
     fontSize: 14,
     fontWeight: '700',
-    color: theme.colors.onSurfaceVariant,
+    color: theme.colors.onSurface,
     marginLeft: 4,
   },
   
@@ -617,7 +806,6 @@ const createStyles = (theme: any) => StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'flex-end',
     padding: 10,
-    // Subtle gradient effect with shadow on text instead of solid background
   },
   cameraName: {
     color: '#FFF',

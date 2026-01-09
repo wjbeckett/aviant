@@ -304,6 +304,42 @@ class FrigateApiService {
     return response.data;
   }
 
+  // Get stats including per-camera motion status
+  async getStats(): Promise<any> {
+    const client = this.ensureClient();
+    const response = await client.get('/api/stats');
+    return response.data;
+  }
+
+  // Get cameras with active/in-progress events (events without end_time)
+  async getCamerasWithMotion(): Promise<string[]> {
+    try {
+      const client = this.ensureClient();
+      // Get recent events - in_progress=1 filters to events that haven't ended yet
+      const response = await client.get('/api/events', {
+        params: {
+          in_progress: 1,
+          limit: 20
+        }
+      });
+      
+      const events = response.data || [];
+      const camerasWithMotion = new Set<string>();
+      
+      events.forEach((event: any) => {
+        // Event is active if it has no end_time
+        if (event.camera && !event.end_time) {
+          camerasWithMotion.add(event.camera);
+        }
+      });
+      
+      return Array.from(camerasWithMotion);
+    } catch (err) {
+      console.error('[FrigateApi] Failed to get active events:', err);
+      return [];
+    }
+  }
+
   async getCameras(): Promise<Camera[]> {
     const config = await this.getConfig();
     return Object.entries(config.cameras).map(([name, camera]: [string, any]) => ({
