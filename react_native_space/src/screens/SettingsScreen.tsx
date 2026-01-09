@@ -251,8 +251,7 @@ function SettingsScreen({ route }: Props) {
 
         {/* App Info */}
         <View style={styles.footer}>
-          <Text style={styles.footerText}>Aviant v1.0.0</Text>
-          <Text style={styles.footerText}>Frigate NVR Mobile Client</Text>
+          <Text style={styles.footerText}>Aviant v0.10.0</Text>
         </View>
       </ScrollView>
 
